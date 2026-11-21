@@ -30,7 +30,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+<<<<<<< HEAD
       - name: Run unit tests
+=======
+      - name: Run tests
+>>>>>>> 24ad25c9ad5719b3f2db04469306b12343320aa7
         run: python -m unittest discover -s tests -v
       - name: Build synthetic demos
         run: |
@@ -53,6 +57,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends gfortran cmake make
           python -m pip install --upgrade pip
           python -m pip install iri2020
+<<<<<<< HEAD
       - name: Calculate global IRI samples and TEC sensitivity scenarios
         run: python scripts/build_ionosphere.py --max-cells 72 --max-frames 3
       - name: Validate ionosphere JSON
@@ -69,6 +74,20 @@ jobs:
               assert all(c['method'] in ('IRI_RUN','SPATIAL_INTERPOLATION') for c in f['map_cells'])
           assert d['metadata']['is_forecast'] is False
           print('IRI v0.7: 3 frames, global map grid and provenance validated')
+=======
+      - name: Calculate IRI pilot electron density
+        run: |
+          python scripts/build_ionosphere.py --max-cells 24 --max-frames 1
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('docs/ionosphere.json')
+          d = json.loads(p.read_text(encoding='utf-8'))
+          frames = d.get('frames', [])
+          cells = sum(len(f.get('cells', [])) for f in frames)
+          assert frames and cells > 0, 'IRI generated no valid cells'
+          print(f'IRI validated: {len(frames)} frames, {cells} cells')
+>>>>>>> 24ad25c9ad5719b3f2db04469306b12343320aa7
           PY
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
