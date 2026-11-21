@@ -24,8 +24,8 @@ body:fullscreen{width:100%;height:100%;overflow:auto;background:#071522}body:ful
 <label>物理量<select id="metric"><option value="fof2">foF2 [MHz]</option><option value="hmf2">hmF2 [km]</option><option value="ne">Ne [m⁻³]（指定高度）</option><option value="tec">VTEC [TECU]（IRI計算地点のみ）</option></select></label>
 <label>モデル<select id="variant"><option value="iri">IRI将来時刻基準</option><option value="tec">TEC連動シナリオ（実験）</option></select></label>
 <label>地理範囲<select id="region"><option value="japan">日本付近</option><option value="global">全球</option></select></label>
-<label>背景地図<select id="mapStyle"><option value="dark">ダークマップ</option><option value="osm">標準地図（OSM）</option><option value="satellite">衛星画像（Esri）</option></select></label>
-<label>ヒートマップ透明度 <span id="heatAlphaLabel">76%</span><input id="heatAlpha" type="range" min="20" max="100" step="5" value="76" style="padding:2px 0;width:115px"></label>
+<label>背景地図<select id="mapStyle"><option value="dark">ダークマップ（OSM・キー不要）</option><option value="osm" selected>標準地図（OSM・キー不要）</option><option value="satellite">衛星画像（Esri）</option></select></label>
+<label>ヒートマップ透明度 <span id="heatAlphaLabel">65%</span><input id="heatAlpha" type="range" min="20" max="100" step="5" value="65" style="padding:2px 0;width:115px"></label>
 <label style="flex-direction:row;align-items:center;gap:5px;margin-bottom:7px"><input type="checkbox" id="showSites" style="width:auto" checked>IRI計算地点</label>
 <label>電子密度高度<select id="alt"><option value="100">100 km</option><option value="150">150 km</option><option value="200">200 km</option><option value="250">250 km</option><option value="300" selected>300 km</option><option value="350">350 km</option><option value="400">400 km</option><option value="500">500 km</option><option value="600">600 km</option><option value="800">800 km</option><option value="1000">1000 km</option></select></label>
 <button class="primary" id="play">▶ 再生</button><button id="prev">◀</button><button id="next">▶</button>
@@ -38,13 +38,14 @@ body:fullscreen{width:100%;height:100%;overflow:auto;background:#071522}body:ful
 <input type="range" id="seek" min="0" max="0" step="1" value="0" aria-label="予報の時刻選択" disabled>
 <div id="area"><div id="fieldMap" role="application" aria-label="地図上のfoF2 / hmF2予報ヒートマップ"></div><canvas id="surface" aria-hidden="true"></canvas><div class="label" id="timeLabel">—</div></div>
 <div class="legend"><span id="low">—</span><span class="ramp"></span><span id="high">—</span><span id="valueMeta">—</span></div>
-<div class="warn">地図背景 © OpenStreetMap contributors / CARTO または © Esri。地図と予報は緯度経度で位置合わせしています。クリックでその地点のモデル値を確認できます。<br>表示はIRI計算地点間の距離重み付き空間補間。値がない領域は透明・欠測とし、空間的に遠い予報地点へは外挿しません。元のTEC高解像度動画は別ページです。</div>
+<div class="warn">地図背景 © OpenStreetMap contributors または © Esri。地図と予報は緯度経度で位置合わせしています。クリックでその地点のモデル値を確認できます。<br>表示は限られたIRI計算地点間の距離重み付き空間補間です。計算地点から離れるほど半透明になり、観測・高解像度の予報を意味しません。元のTEC高解像度動画は別ページです。</div>
 </div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
 import {PALETTES,distanceKm,clamp,valid} from './shared/gaia3d.mjs';
 import {latitudeAtMercatorFraction} from './shared/map-geo.mjs';
-const $=id=>document.getElementById(id);const p={data:null,i:0,timer:null,map:null,base:null,heat:null,sites:null,weightGrid:null};
+import {coverageAlpha,COVERAGE_LIMIT_KM} from './shared/forecast-fade.mjs';
+const $=id=>document.getElementById(id);const p={data:null,i:0,timer:null,map:null,base:null,heat:null,sites:null,weightGrid:null,mapWarning:''};
 const bounds={japan:{w:121,e:152,s:23,n:47},global:{w:-180,e:180,s:-75,n:75}};
 const palette=PALETTES.turbo;
 function colors(t){const x=clamp(t,0,.99999)*(palette.length-1),i=Math.floor(x),f=x-i;return palette[i].map((v,k)=>Math.round(v*(1-f)+palette[i+1][k]*f))}
@@ -57,20 +58,39 @@ function value(site){const metric=$('metric').value,variant=$('variant').value;i
 }
 function range(){switch($('metric').value){case 'fof2':return [1,18,'foF2 [MHz]'];case 'hmf2':return [150,550,'hmF2 [km]'];case 'tec':return [0,100,'VTEC [TECU]'];default:return [8,12.8,'log₁₀ Ne [m⁻³]'];}}
 function sample(ss,lat,lon){const nearest=[];for(const s of ss){const d=distanceKm(lat,lon,s.lat,s.lon);if(nearest.length<4){nearest.push([d,s]);nearest.sort((a,b)=>a[0]-b[0]);}else if(d<nearest[3][0]){nearest[3]=[d,s];nearest.sort((a,b)=>a[0]-b[0]);}}
- if(!nearest.length||nearest[0][0]>($('region').value==='japan'?750:3800))return null;
+ if(!nearest.length||nearest[0][0]>COVERAGE_LIMIT_KM[$('region').value])return null;
  let sum=0,wt=0;for(const [d,s] of nearest){const v=value(s);if(!valid(v))continue;const w=1/Math.max(50,d)**2;sum+=v*w;wt+=w}return wt?sum/wt:null;
 }
+// Dark tiles are derived from standard OpenStreetMap tiles with a local CSS
+// filter; no CARTO/Stadia/Mapbox token or API-key endpoint is used.
 const BASEMAPS={
- dark:{url:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',attribution:'© OpenStreetMap contributors © CARTO',maxNativeZoom:19},
  osm:{url:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',attribution:'© OpenStreetMap contributors',maxNativeZoom:19},
- satellite:{url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',attribution:'Tiles © Esri',maxNativeZoom:18}
+ dark:{url:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',attribution:'© OpenStreetMap contributors',maxNativeZoom:19,
+       filter:'grayscale(.42) invert(.88) hue-rotate(180deg) brightness(.7) contrast(.88)'},
+ satellite:{url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            attribution:'Tiles © Esri',maxNativeZoom:18}
 };
 function mapBounds(){const b=bounds[$('region').value];return L.latLngBounds([[b.s,b.w],[b.n,b.e]])}
 function changeBasemap(){
  if(!p.map)return;
  if(p.base)p.map.removeLayer(p.base);
- const o=BASEMAPS[$('mapStyle').value]||BASEMAPS.dark;
- p.base=L.tileLayer(o.url,{attribution:o.attribution,maxZoom:12,maxNativeZoom:o.maxNativeZoom,crossOrigin:true}).addTo(p.map);
+ const name=$('mapStyle').value;
+ const o=BASEMAPS[name]||BASEMAPS.osm;
+ const layer=L.tileLayer(o.url,{attribution:o.attribution,maxZoom:12,maxNativeZoom:o.maxNativeZoom,crossOrigin:true});
+ p.base=layer;
+ layer.addTo(p.map);
+ if(o.filter && layer.getContainer())layer.getContainer().style.filter=o.filter;
+ let errors=0;
+ layer.on('tileerror',()=>{
+  if(p.base!==layer)return;
+  if(++errors<3)return;
+  if(name!=='osm'){
+   p.mapWarning=`背景地図「${name}」のタイル取得に失敗したため、標準OSM地図に切り替えました。`;
+   $('mapStyle').value='osm';
+   changeBasemap();
+  }else p.mapWarning='OpenStreetMapタイルを取得できません。ネットワークまたはタイル配信制限を確認してください。';
+  if(p.data)draw();
+ });
 }
 function initMap(){
  if(!window.L)throw Error('Leafletが未読み込みです。地図CDNを確認してください');
@@ -93,7 +113,7 @@ function gridWeights(ss,nx,ny,b){
  const locations=ss.map(x=>x.lat.toFixed(3)+','+x.lon.toFixed(3)).join('|');
  const key=$('region').value+'|'+nx+'|'+ny+'|'+locations;
  if(p.weightGrid?.key===key)return p.weightGrid.weights;
- const maxDistance=$('region').value==='japan'?750:3800;
+ const maxDistance=COVERAGE_LIMIT_KM[$('region').value];
  const rows=[];
  for(let y=0;y<ny;y++){
   const lat=latitudeAtMercatorFraction(b.n,b.s,(y+.5)/ny);
@@ -105,17 +125,18 @@ function gridWeights(ss,nx,ny,b){
     else if(d<nearest[3][0]){nearest[3]=[d,i];nearest.sort((a,b)=>a[0]-b[0]);}
    }
    if(!nearest.length||nearest[0][0]>maxDistance){rows.push([]);continue;}
-   rows.push(nearest.map(([d,i])=>[i,1/Math.max(50,d)**2]));
+   rows.push(nearest.map(([d,i])=>[i,1/Math.max(50,d)**2,d]));
   }
  }
  p.weightGrid={key,weights:rows};return rows;
 }
 function weightedField(ss,weights){
- let total=0,validWeight=0;
- for(const [i,w] of weights){const v=value(ss[i]);if(!valid(v))continue;
-  total+=v*w;validWeight+=w;
+ if(!weights?.length)return {v:null,nearestKm:Infinity};
+ let total=0,validWeight=0,nearestKm=Infinity;
+ for(const [i,w,d] of weights){const v=value(ss[i]);if(!valid(v))continue;
+  total+=v*w;validWeight+=w;nearestKm=Math.min(nearestKm,d);
  }
- return validWeight?total/validWeight:null;
+ return {v:validWeight?total/validWeight:null,nearestKm};
 }
 function draw(){
  if(!p.data||!p.map)return;
@@ -127,11 +148,14 @@ function draw(){
  // Without this inversion, equatorward pixels drift from the tiles at high latitudes.
  for(let y=0;y<ny;y++){
   for(let x=0;x<nx;x++){
-   const k=(y*nx+x)*4,v=weightedField(ss,weights[y*nx+x]);
+   const k=(y*nx+x)*4,{v,nearestKm}=weightedField(ss,weights[y*nx+x]);
    if(valid(v)){
-    const col=colors((v-lo)/(hi-lo));
-    pixels.data[k]=col[0];pixels.data[k+1]=col[1];pixels.data[k+2]=col[2];pixels.data[k+3]=255;
-    ok++;
+    const a=coverageAlpha(nearestKm,region);
+    if(a>0){
+     const col=colors((v-lo)/(hi-lo));
+     pixels.data[k]=col[0];pixels.data[k+1]=col[1];pixels.data[k+2]=col[2];pixels.data[k+3]=Math.round(255*a);
+     ok++;
+    }
    }
   }
  }
@@ -148,9 +172,9 @@ function draw(){
  const f=p.data.frames[p.i],tag=f.is_prospective?'将来時刻の実験的推定':'発表以前の参考再生';
  $('timeLabel').textContent=`${f.valid_at} UTC · ${p.i+1}/${p.data.frames.length} · ${tag}`;
  $('low').textContent=lo+' '+label;$('high').textContent=hi+' '+label;
- $('valueMeta').textContent=`IRI計算地点 ${ss.length} · 有効描画画素 ${ok}/${nx*ny} · 地図重畳（Web Mercator）`;
+ $('valueMeta').textContent=`IRI計算地点 ${ss.length} · 有効描画画素 ${ok}/${nx*ny} · 地図重畳（Web Mercator） · 距離に応じて透過`;
  $('status').textContent=`状態: ${p.data.status} · 発表 ${p.data.metadata.issued_at} UTC · 30分間隔 · ${label} · ${$('variant').value==='tec'?'TEC連動シナリオ':'IRI基準'}\n`+
- `地図と位置合わせした電子密度モデルの空間補間。欠測は透明表示。予報技能や通信・航法可用性は未検証。`;
+ `地図と位置合わせしたIRI疎格子補間。地点から遠い範囲ほど透過させています（日本域最大 ${COVERAGE_LIMIT_KM.japan} km）。予報技能や通信・航法可用性は未検証。`+(p.mapWarning?"\n"+p.mapWarning:"");
  $('seek').value=String(p.i);
 }
 function stop(){if(p.timer)clearInterval(p.timer);p.timer=null;$('play').textContent='▶ 再生'}
