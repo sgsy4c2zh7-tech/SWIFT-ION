@@ -104,8 +104,10 @@ jobs:
             --animation docs/animation \
             --ionosphere docs/ionosphere.json \
             --output docs/ion_forecast.json \
-            --max-sites 14 \
-            --anchor-hours 12
+            --max-sites 120 \
+            --japan-sites 40 \
+            --anchor-hours 6 \
+            --global-anchor-hours 12
           python - <<'PYTEST'
           import json
           from pathlib import Path

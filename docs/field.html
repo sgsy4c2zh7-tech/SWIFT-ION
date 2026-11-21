@@ -172,9 +172,9 @@ function draw(){
  const f=p.data.frames[p.i],tag=f.is_prospective?'将来時刻の実験的推定':'発表以前の参考再生';
  $('timeLabel').textContent=`${f.valid_at} UTC · ${p.i+1}/${p.data.frames.length} · ${tag}`;
  $('low').textContent=lo+' '+label;$('high').textContent=hi+' '+label;
- $('valueMeta').textContent=`IRI計算地点 ${ss.length} · 有効描画画素 ${ok}/${nx*ny} · 地図重畳（Web Mercator） · 距離に応じて透過`;
+ $('valueMeta').textContent=`有効IRI計算地点 ${ss.length} · 有効描画画素 ${ok}/${nx*ny} · 地図重畳（Web Mercator） · 距離に応じて透過`;
  $('status').textContent=`状態: ${p.data.status} · 発表 ${p.data.metadata.issued_at} UTC · 30分間隔 · ${label} · ${$('variant').value==='tec'?'TEC連動シナリオ':'IRI基準'}\n`+
- `地図と位置合わせしたIRI疎格子補間。地点から遠い範囲ほど透過させています（日本域最大 ${COVERAGE_LIMIT_KM.japan} km）。予報技能や通信・航法可用性は未検証。`+(p.mapWarning?"\n"+p.mapWarning:"");
+ `全球・日本域でIRI計算地点を増やした研究用空間補間。日本域 ${p.data.metadata.iri_japan_valid_sites ?? '—'}/${p.data.metadata.iri_japan_requested_sites ?? '—'} 地点（${p.data.metadata.iri_anchor_hours ?? '—'}hアンカー）、全球その他 ${p.data.metadata.iri_global_valid_sites ?? '—'}/${p.data.metadata.iri_global_requested_sites ?? '—'} 地点（${p.data.metadata.iri_global_anchor_hours ?? '—'}hアンカー）。　計算地点から離れると透過（日本域上限 ${COVERAGE_LIMIT_KM.japan} km）。実測・検証済み予報ではありません。`+(p.mapWarning?"\n"+p.mapWarning:"");
  $('seek').value=String(p.i);
 }
 function stop(){if(p.timer)clearInterval(p.timer);p.timer=null;$('play').textContent='▶ 再生'}

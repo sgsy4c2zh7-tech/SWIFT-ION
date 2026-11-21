@@ -20,9 +20,13 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 PROFILE_ALTITUDES = list(range(100, 2001, 25))
 DISPLAY_ALTITUDES = [100,150,200,250,300,350,400,500,600,800,1000]
+# Public geographic research lattice. Japan sites are preferentially sampled at
+# 6-hour IRI anchor times; global sites can use a coarser cadence to bound runtime.
 JAPAN_SITES = [(43.06,141.35),(38.27,140.87),(35.68,139.76),
-               (35.18,136.91),(34.70,135.50),(33.59,130.40),
-               (26.21,127.68)]
+               (35.18,136.91),(34.70,135.50),(34.40,132.46),
+               (33.59,130.40),(31.60,130.56),(26.21,127.68)]
+JAPAN_BOUNDS = (23.0, 47.0, 121.0, 152.0)
+SITE_LAYOUT = 'JAPAN_MAXMIN_PLUS_GLOBAL_EQUAL_AREA_FIBONACCI_V1' 
 SCHEMA = 'swift-ion-iri-tec-forecast-v1'
 
 
@@ -50,25 +54,80 @@ def distance_km(p, q):
     return 6371*math.acos(max(-1,min(1,z)))
 
 
-def locations(global_json, max_sites=16):
-    if max_sites<4 or max_sites>36: raise ValueError('max-sites must be 4..36')
-    seen=set();out=[]
-    for lat,lon in JAPAN_SITES[:min(max_sites, len(JAPAN_SITES))]:
-        out.append((lat,lon));seen.add((lat,lon))
-    cells=global_json.get('frames',[{}])[0].get('cells',[])
-    candidates=[]
-    for c in cells:
-        try:
-            lat,lon=float(c['lat']),float(c['lon'])
-        except (TypeError,ValueError,KeyError): continue
-        if not (-90<=lat<=90 and -180<=lon<=180): continue
-        if (lat,lon) not in seen:
-            candidates.append((lat,lon));seen.add((lat,lon))
-    while len(out)<max_sites and candidates:
-        chosen=max(candidates,key=lambda p:min(distance_km(p,q) for q in out))
-        out.append(chosen);candidates.remove(chosen)
+def in_japan(lat, lon):
+    south, north, west, east = JAPAN_BOUNDS
+    return south <= lat <= north and west <= lon <= east
+
+
+def fibonacci_sites(n):
+    """Near-equal-area deterministic sphere candidates. No pseudo-observation."""
+    if n < 1:
+        return []
+    golden = math.pi * (3 - math.sqrt(5))
+    out = []
+    for i in range(n):
+        z = 1 - 2 * (i + .5) / n
+        lat = math.degrees(math.asin(max(-1, min(1, z))))
+        lon = (math.degrees(i * golden) + 180) % 360 - 180
+        out.append((round(lat, 5), round(lon, 5)))
     return out
 
+
+def farthest_fill(start, candidates, target):
+    """Incrementally maximize great-circle spacing; O(candidates * new sites)."""
+    chosen = list(start)
+    existing = set(chosen)
+    pending = [p for p in candidates if p not in existing]
+    if not pending or len(chosen) >= target:
+        return chosen[:target]
+    if chosen:
+        distance = [min(distance_km(p, q) for q in chosen) for p in pending]
+    else:
+        distance = [1e9] * len(pending)
+    while len(chosen) < target and pending:
+        best = max(range(len(pending)), key=lambda i: distance[i])
+        candidate = pending.pop(best)
+        distance.pop(best)
+        if candidate in existing:
+            continue
+        chosen.append(candidate)
+        existing.add(candidate)
+        for i, p in enumerate(pending):
+            distance[i] = min(distance[i], distance_km(p, candidate))
+    return chosen
+
+
+def locations(global_json, max_sites=120, japan_sites=40):
+    """High-density Japan grid + equal-area global IRI sites.
+
+    The global candidates are new IRI locations, never fake values interpolated
+    from a previous IRI frame. Historical IRI cells are not treated as new runs.
+    """
+    if not 4 <= max_sites <= 180:
+        raise ValueError('max-sites must be 4..180')
+    if not 0 <= japan_sites <= max_sites:
+        raise ValueError('japan-sites must be 0..max-sites')
+    # Regular candidate lattice covering Japan's surroundings and adjacent seas.
+    local = [(round(23.5 + 3*i, 3), round(121.5 + 3.75*j, 3))
+             for i in range(8) for j in range(9) if 23 <= 23.5 + 3*i <= 47
+             and 121 <= 121.5 + 3.75*j <= 152]
+    starters = list(JAPAN_SITES[:min(japan_sites, len(JAPAN_SITES))])
+    japan = farthest_fill(starters, local, japan_sites)
+    # Equal-area globe with min-distance greedy coverage: near-uniform spacing
+    # at high latitudes as well as in the tropics; avoid re-filling Japan.
+    spherical = [p for p in fibonacci_sites(max(680, 5 * max_sites))
+                 if not in_japan(*p)]
+    return farthest_fill(japan, spherical, max_sites)
+
+
+def _anchor_grid(nframes, hours):
+    steps = round(hours * 2)
+    if not (1 <= steps <= 96) or abs(steps - hours * 2) > 1e-8:
+        raise ValueError('Anchor interval must be a multiple of 0.5h in [0.5,48]')
+    indexes = list(range(0, nframes, steps))
+    if indexes[-1] != nframes-1:
+        indexes.append(nframes-1)
+    return indexes
 
 def find_bracket(axis, x):
     if not axis or x<axis[0] or x>axis[-1]:return None
@@ -128,24 +187,34 @@ def f2_peak(ne, alts=PROFILE_ALTITUDES):
     return {'nmf2_m3':n,'hmf2_km':h,'fof2_mhz':8.98*math.sqrt(n)/1e6}
 
 
-def build_anchors(times, sites, provider, hours):
-    gap=int(hours*2)
-    if not 1<=gap<=96:raise ValueError('anchor_hours outside 0.5..48h')
-    indexes=list(range(0,len(times),gap))
-    if indexes[-1]!=len(times)-1:indexes.append(len(times)-1)
-    anchors={};failures=[]
-    for site_index,(lat,lon) in enumerate(sites):
-        pairs={}
-        for index in indexes:
-            try:
-                ne=profile_iri(provider,times[index],lat,lon)
-                if any(v is None for v in ne): raise ValueError('Incomplete IRI vertical coverage')
-                pairs[index]=ne
-            except Exception as e:
-                failures.append(f'IRI site {site_index}, anchor {index}: {str(e)[:100]}')
-        if len(pairs)==len(indexes):anchors[site_index]=pairs
-    return indexes,anchors,failures
+def build_anchors(times, sites, provider, hours, *, japan_site_count=None,
+                  global_hours=None):
+    """Calculate real IRI profiles on regional 6h / global 12h anchors.
 
+    Retain only sites with a full anchor sequence; unavailable profiles are
+    marked as missing, not substituted from other locations or dates.
+    """
+    japan_site_count = len(sites) if japan_site_count is None else japan_site_count
+    global_hours = hours if global_hours is None else global_hours
+    regional_idx = _anchor_grid(len(times), hours)
+    global_idx = _anchor_grid(len(times), global_hours)
+    anchors, failures = {}, []
+    attempted = 0
+    for site_index, (lat, lon) in enumerate(sites):
+        indexes = regional_idx if site_index < japan_site_count else global_idx
+        pairs = {}
+        for idx in indexes:
+            attempted += 1
+            try:
+                ne = profile_iri(provider, times[idx], lat, lon)
+                if any(v is None for v in ne):
+                    raise ValueError('Incomplete IRI vertical coverage')
+                pairs[idx] = ne
+            except Exception as exc:
+                failures.append(f'IRI site {site_index}, anchor {idx}: {str(exc)[:100]}')
+        if len(pairs) == len(indexes):
+            anchors[site_index] = {'indexes': indexes, 'pairs': pairs}
+    return anchors, failures, attempted
 
 def interpolate_anchors(frame_index, indexes, pairs):
     if frame_index in pairs:return pairs[frame_index]
@@ -179,7 +248,7 @@ def status_payload(now, status, reason, index=None):
 
 
 def build(animation_dir, ionosphere, output, *, now=None, iri_provider=None,
-          max_sites=16, anchor_hours=12):
+          max_sites=120, anchor_hours=6, japan_sites=40, global_anchor_hours=12):
     now=now or datetime.now(timezone.utc)
     if now.tzinfo is None:raise ValueError('Run time must have timezone')
     base=Path(animation_dir)
@@ -199,7 +268,8 @@ def build(animation_dir, ionosphere, output, *, now=None, iri_provider=None,
     ion=json.loads(Path(ionosphere).read_text(encoding='utf-8'))
     if ion.get('metadata',{}).get('is_forecast') is not False:
         raise ValueError('IRI source is not labeled climatology')
-    locs=locations(ion,max_sites=max_sites)
+    japan_sites=min(japan_sites,max_sites)
+    locs=locations(ion,max_sites=max_sites,japan_sites=japan_sites)
     if iri_provider is None:
         try:
             from iri2020 import IRI
@@ -210,9 +280,12 @@ def build(animation_dir, ionosphere, output, *, now=None, iri_provider=None,
             payload=status_payload(now,'IRI_UNAVAILABLE','IRI model could not be imported: '+str(e)[:150])
             write(output,payload)
             return payload
-    anchor_indices,anchors,failures=build_anchors(ts,locs,iri_provider,anchor_hours)
-    if len(anchors)<4:
-        payload=status_payload(now,'IRI_UNAVAILABLE',f'Only {len(anchors)} complete IRI anchor sites')
+    anchors,failures,attempted=build_anchors(ts,locs,iri_provider,anchor_hours,
+                                      japan_site_count=min(japan_sites,len(locs)),
+                                      global_hours=global_anchor_hours)
+    minimum_valid=max(4,math.ceil(max_sites*.65)) if max_sites>=80 else 4
+    if len(anchors)<minimum_valid:
+        payload=status_payload(now,'IRI_UNAVAILABLE',f'Only {len(anchors)}/{max_sites} complete IRI anchor sites (required {minimum_valid})')
         payload['model_failures']=failures[:12]
         write(output,payload)
         return payload
@@ -236,7 +309,8 @@ def build(animation_dir, ionosphere, output, *, now=None, iri_provider=None,
         cells=[]
         for idx_site in site_indices:
             lat,lon=locs[idx_site]
-            ne=interpolate_anchors(t_index,anchor_indices,anchors[idx_site]);pk=f2_peak(ne)
+            entry=anchors[idx_site]
+            ne=interpolate_anchors(t_index,entry["indexes"],entry["pairs"]);pk=f2_peak(ne)
             if pk is None:continue
             vtec=bilinear_vtec(forecast_cells[t_index],lats,lons,lat,lon)
             factor,sc_status,partial=scenario(ne,vtec)
@@ -263,12 +337,21 @@ def build(animation_dir, ionosphere, output, *, now=None, iri_provider=None,
           'is_validated_forecast':False,'is_observed_3d_density':False,
           'has_prospective_frames':any(f['is_prospective'] for f in result),
           'scenario_type':'BOUNDED_UNIFORM_PROFILE_SCALING',
-          'iri_anchor_hours':anchor_hours,'iri_profiles_computed':len(anchors)*len(anchor_indices),
+          'iri_anchor_hours':anchor_hours,'iri_profiles_computed':sum(len(a['indexes']) for a in anchors.values()),
+          'iri_profiles_attempted':attempted,
+          'iri_japan_requested_sites':min(japan_sites,len(locs)),
+          'iri_global_requested_sites':max(0,len(locs)-japan_sites),
+          'iri_japan_valid_sites':sum(i<japan_sites for i in anchors),
+          'iri_global_valid_sites':sum(i>=japan_sites for i in anchors),
+          'iri_global_anchor_hours':global_anchor_hours,
+          'iri_site_distribution':SITE_LAYOUT,
+          'minimum_valid_sites_required':minimum_valid,
+          'map_resolution_note':'Spatial interpolation does not increase physical IRI information.',
           'iri_valid_sites':len(anchors),'tec_scenario_site_frames':scenario_pairs,
           'time_step_minutes':30,'htop_partial_tec_km':2000,
           'fof2_definition':'foF2 = 8.98 sqrt(NmF2[m-3]) / 1e6 MHz',
           'hmf2_is_iri_only':True,'is_forecast_skill':False,
-          'time_interpolation':'IRI electron-density profiles linearly interpolated between future 12-hour (configurable) IRI anchor calculations; no independent model dynamics',
+          'time_interpolation':f'Japan: {anchor_hours}h IRI anchors; outside Japan: {global_anchor_hours}h IRI anchors. All 30-minute frames in between are time-interpolated, not model dynamics.',
           'warnings':['EXPERIMENTAL: TEC does NOT uniquely determine vertical electron density or hmF2.',
             'SWIFT-TEC full VTEC vs IRI 100-2000km partial TEC have different column definitions.',
             'TEC-linked density and foF2 scenarios require bounded factor [0.5,2.0] and nontruncated IRI topside.',
@@ -279,7 +362,7 @@ def build(animation_dir, ionosphere, output, *, now=None, iri_provider=None,
          'frames':result,'model_failures':failures[:12]}
     write(output,payload)
     print('SWIFT-ION 30-min model scenario:',status,'frames',len(result),'iri_sites',len(anchors),
-          'iri_calls',len(anchors)*len(anchor_indices),'tec_scenario_site_frames',scenario_pairs,flush=True)
+          'iri_calls',attempted,'japan_sites',min(japan_sites,len(locs)),'tec_scenario_site_frames',scenario_pairs,flush=True)
     return payload
 
 
@@ -295,10 +378,13 @@ def main():
     ap.add_argument('--animation',type=Path,default=ROOT/'docs/animation')
     ap.add_argument('--ionosphere',type=Path,default=ROOT/'docs/ionosphere.json')
     ap.add_argument('--output',type=Path,default=ROOT/'docs/ion_forecast.json')
-    ap.add_argument('--max-sites',type=int,default=16)
-    ap.add_argument('--anchor-hours',type=int,default=12)
+    ap.add_argument('--max-sites',type=int,default=120)
+    ap.add_argument('--japan-sites',type=int,default=40)
+    ap.add_argument('--anchor-hours',type=float,default=6)
+    ap.add_argument('--global-anchor-hours',type=float,default=12)
     a=ap.parse_args()
-    try:build(a.animation,a.ionosphere,a.output,max_sites=a.max_sites,anchor_hours=a.anchor_hours)
+    try:build(a.animation,a.ionosphere,a.output,max_sites=a.max_sites,anchor_hours=a.anchor_hours,
+              japan_sites=min(a.japan_sites,a.max_sites),global_anchor_hours=a.global_anchor_hours)
     except (OSError,ValueError,KeyError,TypeError,ImportError) as exc:
         # If the OPTIONAL model cannot run, preserve every established operation.
         print('WARNING: experimental ionosphere forecast unavailable:',str(exc),file=sys.stderr)
