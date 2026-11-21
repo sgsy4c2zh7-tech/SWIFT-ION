@@ -1,62 +1,58 @@
-# SWIFT-ION v1.1 — 365-day forecast & hit-rate history
+# SWIFT-ION v1.2 integrated public-research suite
 
-## Purpose
+This is a **patch** for the existing `sgsy4c2zh7-tech/SWIFT-ION` repository, not a full standalone copy. Apply by copying `.github`, `scripts`, `docs` and `tests` into the repository root and overwriting matching files. Commit and push to `main` using GitHub Desktop.
 
-Adds long-lived **rolling 365-day** retention of ionosonde station outlooks, verified
-observations and matched predictions to branch `swift-ion-history`. Uses UTC and
-keeps issue time, valid time, station, confidence, model and lead. A separate
-Git branch avoids modifying SWIFT-TEC and prevents adding binary/large archive
-files to `main`/GitHub Pages. Initial deployment does **not** invent old forecasts.
+## Components delivered
 
-### Hit-rate definitions (configurable scientific thresholds)
-- foF2 hit: `abs(forecast_fof2 - ionosonde_fof2) <= 1 MHz`.
-- hmF2 hit: `abs(forecast_hmf2 - ionosonde_hmf2) <= 30 km`.
-- Each metric has separate denominator and is `null` when no valid pairs.
-- Also saves MAE, RMSE, bias and sample sizes by UTC day/month and nominal
-  lead 1/3/6/12/24 hours. They are **IRI climatology baseline** estimates,
-  not SWIFT-TEC-corrected ionosphere forecasts or validated operational skill.
+1. **30-minute full-native-grid VTEC animation**: `docs/animate.html`, `docs/shared/forecast.js`, `scripts/animation_format.py`, `scripts/build_live_swifttec.py`, `scripts/check_animation.py`. The existing upstream SWIFT-TEC `runForecast()` still executes read-only; SWIFT-ION exports its full 30-minute lat/lon grid into time-indexed JSON chunks. This data is an **unvalidated experimental SWIFT-TEC forecast**, not an observation. Its ML-correction output stage has not been independently verified. Site URL `/animate.html`.
+2. **Public sample-route analysis**: `docs/impact.html`. Four deliberately generic great-circle sample journeys; route time interpolation (30-minute forecast time axis), spatial bilinear interpolation, sampled VTEC, approximate GPS L1 vertical first-order group delay, and changes of consecutive samples normalized to 100 km. Consecutive-sample changes include temporal variation; they are not a pure spatial gradient. No actual flight plan, avoidance recommendation, GNSS availability, HF link performance, radiation exposure, or tactical operational scoring. Site URL `/impact.html`.
+3. **Space weather situational reference**: `scripts/build_space_weather.py` and `docs/ops.html`. NOAA SWPC `noaa-scales.json` G/S/R categories **current only**; source time and fetch time recorded, stale source not presented as current. Distinct labels for unavailable HF performance, route radiation, radar and satellite-link capability. Site URL `/ops.html`.
+4. **3D IRI height slices**: `scripts/build_density_slices.py` and `docs/globe.html`. Sparse IRI model profiles interpolated to display positions and selected altitudes; CesiumJS point-shell visualization. This is **not an independent 3-D forecast nor 3-D observation**; no ionosphere refraction ray tracing or D-region. Site URL `/globe.html`.
+5. **Updated front page**: `docs/index.html` links all these panels and the existing science and accuracy pages.
 
-## Installation (GitHub Desktop)
+## Existing functionality explicitly preserved
 
-1. Extract this ZIP to a temporary folder.
-2. Merge `.github`, `scripts`, `tests`, `docs` into your **SWIFT-ION repo root**.
-   Overwrite `.github/workflows/pages.yml`; DO NOT replace SWIFT-TEC itself.
-3. In GitHub Desktop commit: `Add rolling 365-day IRI forecast and accuracy history`.
-4. Push origin. On GitHub, check **Settings > Actions > General > Workflow permissions**.
-   The workflow needs **Read and write permissions** so it can write the separate
-   `swift-ion-history` branch; the workflow explicitly requests `contents: write`.
-5. Check Actions: `Prepare rolling-year archive branch`, `Record prospective...`,
-   `Commit 365-day history...`, and `Deploy GitHub Pages`.
-6. Open `https://sgsy4c2zh7-tech.github.io/SWIFT-ION/year.html`.
-   Latest short-term view: `.../skill.html`.
+- `docs/swift_tec_vtec.json` two-hour sampled contract; IRI integration consumes it without code changes.
+- Current `scripts/build_ionosphere.py`, `scripts/build_quality_report.py`, and `scripts/validate_ionosondes.py` and their existing output contracts.
+- `scripts/build_year_archive.py`, `swift-ion-history` branch, rolling 365-day foF2/hmF2 baseline verification, CSV and JSON annual output.
+- Existing GitHub Pages publication and scheduled execution at UTC minute 17/47.
 
-## How persistence works
+## Deploy
 
-- The archive branch has gzipped daily JSONL for `outlooks/`, `observations/`,
-  and `matches/`, plus a README. Only the **active files** from the most recent
-  365 days are retained. Earlier versions could still exist in Git history;
-  removal from all commit history would require a separate purge operation.
-- History is reloaded each scheduled run, checked for duplicates and compared
-  to the latest released KC2G/GIRO-derived observations. A newly produced
-  forecast cannot be scored immediately against observations from the future.
-- GitHub Actions snapshots may still expire in 7 days; **the Git branch is the
-  actual 365-day retention store**. Branch protection or disabled workflow
-  permissions can prevent writes; monitor the `Commit` step.
-- `docs/year_accuracy.json`, `docs/year_daily.csv`, `docs/year_monthly.csv`
-  are rebuilt for the website. The branch remains separate from Pages.
-- Data availability, nominal/actual lead mismatch, sampling gaps, and future
-  corrections must be communicated when interpreting a hit rate.
-- Use is noncommercial research only. GIRO/INGV/KC2G attribution/permission
-  obligations still apply for stored/public evaluation data.
+1. Back up `.github/workflows/pages.yml` and `scripts/build_live_swifttec.py` before overwriting.
+2. Extract patch ZIP and copy its `.github`, `scripts`, `docs`, `tests` folders into the local repository root (same level as existing `README.md`). Overwrite matching files; don't delete other files.
+3. GitHub Desktop Summary: `Add global animation, aviation research and 3D ionosphere views`.
+4. Commit to main / Push origin.
+5. Confirm the GitHub Actions steps **Calculate SWIFT-TEC VTEC forecast and 30-minute animation**, **Fetch NOAA SWPC current scales**, **Export IRI density slices for 3D globe**, **Record prospective IRI forecasts and score a rolling 365 days**, **Deploy GitHub Pages**.
+6. Open `https://sgsy4c2zh7-tech.github.io/SWIFT-ION/` and navigate to the new pages.
 
-## Test locally
+## Known limitations / review points
 
-Within the existing SWIFT-ION repository:
+- New scripts were verified locally using 10 Python unit tests, JavaScript syntax checks, a shared JS interpolation test and workflow YAML parsing, but **the full GitHub Actions end-to-end job, actual SWIFT-TEC upstream browser calculation, and Cesium web rendering were not run in the local container**.
+- The upstream SWIFT-TEC calculation nominally produces 30-minute frames for 120 hours (typically 241 inclusive timestamps). Actual valid frame count is checked at runtime; site rendering uses whatever the model produces.
+- IRI altitude display uses 5 generated IRI times, not the 241 VTEC times. Intermediate IRI time states have not been synthesized.
+- The 3D globe requires WebGL and CesiumJS CDN; map background uses OpenStreetMap; NOAA feed requires internet access during Actions.
+- No restricted flight routes, sensitive asset positions, mission-specific frequencies or unapproved operational data should be placed on publicly hosted GitHub Pages.
+- Model predictions and present NOAA conditions are not validated warnings for communication or navigation availability. The output must not be used for safety/operational decisions.
+- Third-party data, OSM tiles and CesiumJS may have independent attribution/licensing and service-usage requirements; respect them. Existing KC2G/GIRO-derived components remain subject to non-commercial/attribution terms.
+
+## Package contents
 
 ```
-python -m unittest discover -s tests -v
-```
+.github/workflows/pages.yml
+scripts/animation_format.py
+scripts/build_live_swifttec.py
+scripts/check_animation.py
+scripts/build_density_slices.py
+scripts/build_space_weather.py
 
-New scripts are pure Python 3.11 stdlib, but the IRI-2020 runtime is required
-when actually running future outlook issuance. Passing local offline tests
-**does not** prove successful 365-day storage on GitHub Actions.
+docs/index.html
+docs/animate.html
+docs/impact.html
+docs/ops.html
+docs/globe.html
+docs/shared/forecast.js
+
+tests/test_animation_format.py
+tests/test_suite.py
+```

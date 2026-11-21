@@ -1,0 +1,39 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SWIFT-ION | 30-minute Global Animation</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#071523;color:#eaf3fd;font:14px/1.55 system-ui,sans-serif}header{padding:13px 22px;background:#0b2032;border-bottom:1px solid #284359}h1{margin:0 0 5px;font-size:24px}a{color:#88d5ff}nav{display:flex;gap:16px;flex-wrap:wrap;padding:0 0 9px}.warn{color:#f4d39b;font-size:12px;line-height:1.5}.panel{padding:12px 22px;background:#10263b;border-bottom:1px solid #2b4b62}.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end}button,select{font:inherit;background:#18384e;color:#f0f8ff;border:1px solid #50738d;border-radius:8px;padding:8px 12px;cursor:pointer}button:hover{background:#275475}button.primary{background:#2e8aa1;font-weight:700}button:disabled{opacity:.4;cursor:not-allowed}label{font-size:12px;color:#bfd8e7;display:flex;flex-direction:column;gap:3px}#time{font-variant-numeric:tabular-nums;font-weight:650;color:#a3e5ff}#seek{width:100%;cursor:pointer;accent-color:#67d2f0;margin-top:10px}.legend{display:flex;gap:12px;align-items:center;color:#bfced9;font-size:12px}.ramp{width:220px;height:12px;background:linear-gradient(90deg,#233c86,#386bb0,#53b7c4,#a7daaa,#f3dc7a,#f49b55,#ad3649);border-radius:3px}#map{height:calc(100vh - 318px);min-height:380px;position:relative}#heat{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:450}.leaflet-control{z-index:700}#status{font-size:12px;color:#bfd4e6;margin-top:5px}.foot{padding:10px 22px;font-size:12px;color:#b8c9d9}
+@media(max-width:700px){header,.panel{padding-left:11px;padding-right:11px}#map{height:55vh}h1{font-size:20px}.toolbar{gap:6px}}
+</style></head><body>
+<header><h1>SWIFT-ION <span style="color:#79d4f7">Global Time Animation</span></h1><nav><a href="./index.html">Dashboard</a><a href="./impact.html">Flight Route Impact</a><a href="./globe.html">3D Globe</a><a href="./ionosphere.html">IRI / F2</a><a href="./year.html">365-day Skill</a></nav><div class="warn">30分刻みのSWIFT-TEC VTECモデル予報（実測値ではありません）。滑らかな表示は空間補間による描画処理で、元の予報格子解像度を超える科学的情報は追加しません。補正段階は未検証です。</div></header>
+<section class="panel"><div class="toolbar">
+  <button id="play" class="primary" disabled>▶ 再生</button><button id="prev" disabled>◀ 30分</button><button id="next" disabled>30分 ▶</button>
+  <label>再生速度<select id="speed"><option value="1">1フレーム/秒</option><option value="2" selected>2フレーム/秒</option><option value="4">4フレーム/秒</option><option value="8">8フレーム/秒</option></select></label>
+  <label>表示項目<select id="mode"><option value="vtec">VTEC [TECU]</option><option value="delta30">直前30分との差 [TECU]</option></select></label>
+  <label>表示タイムゾーン<select id="tz"><option value="UTC">UTC</option><option value="Asia/Tokyo">JST</option></select></label>
+  <span id="time">データ準備中…</span>
+</div><input id="seek" type="range" min="0" max="0" step="1" value="0" disabled aria-label="予報時刻">
+<div class="legend"><span id="low">0</span><div class="ramp"></div><span id="high">100 TECU</span><span id="counter"></span></div><div id="status" role="status">30分間隔の格子データを読み込み中…</div></section>
+<div id="map"><canvas id="heat"></canvas></div><div class="foot">操作：時刻スライダー・再生/停止・速度変更・拡大/縮小。地図クリックで緯度経度と選択時刻のVTECを確認できます。公開情報を用いた研究画面であり、運用上の通信・航法判定には使えません。<span id="clicked"></span></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script type="module">
+import {ForecastCube,renderRaster,spatial} from './shared/forecast.js';
+const $=id=>document.getElementById(id);const cube=new ForecastCube('./animation/');
+const map=L.map('map',{worldCopyJump:true,zoomControl:true}).setView([18,0],2);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:7}).addTo(map);
+let index=0,playing=false,timer=null,renderSeq=0,current=null;
+function timeStr(t){return new Date(t).toLocaleString('ja-JP',{timeZone:$('tz').value,hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})+' '+$('tz').value}
+function stop(){playing=false;clearInterval(timer);timer=null;$('play').textContent='▶ 再生'}
+function start(){stop();playing=true;$('play').textContent='⏸ 停止';timer=setInterval(()=>select((index+1)%cube.times.length),1000/Number($('speed').value))}
+async function render(){if(!cube.times)return;const seq=++renderSeq;const mode=$('mode').value;
+ try{const data=await cube.frame(index),prev=mode==='delta30'&&index>0?await cube.frame(index-1):null;if(seq!==renderSeq)return;
+   current=data;renderRaster($('heat'),map,cube,data,prev,mode);$('counter').textContent=`${index+1} / ${cube.times.length} フレーム`;const label=timeStr(cube.times[index]);$('time').textContent=label;
+   $('seek').value=String(index);$('status').textContent=`予報：${label} | 元格子 ${cube.ny} × ${cube.nx} | ${cube.index.metadata.source_stage} | 発表: ${cube.index.metadata.generated_at}`;
+   $('low').textContent=mode==='delta30'?'-15':'0';$('high').textContent=mode==='delta30'?'+15 TECU':'100 TECU';
+ }catch(e){stop();$('status').textContent='読み込みエラー: '+e.message}}
+function select(i){index=Math.max(0,Math.min(cube.times.length-1,i));render()}
+$('play').onclick=()=>playing?stop():start();$('prev').onclick=()=>{stop();select(index-1)};$('next').onclick=()=>{stop();select(index+1)};
+$('seek').oninput=e=>{stop();select(Number(e.target.value))};$('mode').onchange=render;$('tz').onchange=render;
+$('speed').onchange=()=>{if(playing)start()};map.on('moveend zoomend resize',()=>{if(current)render()});
+map.on('click',e=>{if(!current)return;const x=spatial(cube,current,e.latlng.lat,e.latlng.lng);$('clicked').textContent=x===null?'データ欠損':`選択位置 ${e.latlng.lat.toFixed(2)}°, ${e.latlng.lng.toFixed(2)}°：${x.toFixed(2)} TECU`});
+try{await cube.load();$('seek').max=String(cube.times.length-1);for(const id of ['play','prev','next','seek'])$(id).disabled=false;render();}catch(e){$('status').textContent='30分データ未公開: '+e.message+'。Actionsの Export / Validate animation ステップを確認してね。'}
+</script></body></html>

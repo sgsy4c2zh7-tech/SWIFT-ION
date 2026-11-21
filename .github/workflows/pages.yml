@@ -51,8 +51,13 @@ jobs:
             https://github.com/sgsy4c2zh7-tech/tec_tool_globalgrid_f107_copy.git \
             _upstream_swifttec
 
-      - name: Calculate SWIFT-TEC VTEC forecast
-        run: python scripts/build_live_swifttec.py
+      - name: Calculate SWIFT-TEC VTEC forecast and 30-minute animation
+        run: |
+          python scripts/build_live_swifttec.py
+          python scripts/check_animation.py
+
+      - name: Fetch NOAA SWPC current scales
+        run: python scripts/build_space_weather.py
 
       - name: Install IRI runtime dependencies
         run: |
@@ -67,6 +72,9 @@ jobs:
           python scripts/build_ionosphere.py \
             --max-cells 80 \
             --max-frames 5
+
+      - name: Export IRI density slices for 3D globe
+        run: python scripts/build_density_slices.py
 
       - name: Validate ionosphere JSON
         run: |
@@ -168,6 +176,9 @@ jobs:
             docs/station_outlook.json
             docs/prospective_skill.json
             docs/year_accuracy.json
+            docs/space_weather.json
+            docs/density_slices.json
+            docs/animation/index.json
           retention-days: 7
           if-no-files-found: error
 
