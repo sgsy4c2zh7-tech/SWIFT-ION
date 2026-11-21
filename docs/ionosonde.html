@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SWIFT-ION | Ionosonde Validation v0.9</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#081728;color:#e8f3fd;font:14px/1.65 system-ui,sans-serif}
+main{max-width:1300px;margin:auto;padding:22px clamp(12px,2vw,24px) 55px}h1{font-size:26px;margin:0}h2{font-size:17px;margin:0 0 10px}a{color:#91d7ff}nav{display:flex;flex-wrap:wrap;gap:16px;margin:13px 0 20px}
+.warn{background:#312d28;border-left:3px solid #f2be75;padding:12px 15px;margin:14px 0 19px;border-radius:7px;color:#f9dba8}.muted{color:#b6cadd}.card{background:#10283d;border:1px solid #2c4d66;border-radius:12px;padding:16px;margin-bottom:14px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.stat{background:#19384e;border-radius:9px;padding:13px}.stat strong{display:block;font-size:26px;line-height:1.4}.stat span{font-size:12px;color:#c0d0db}.twocol{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(300px,1fr);gap:14px}.small{font-size:12px;color:#bdd0df}#map{height:430px;border-radius:8px;background:#10273b}#plot{width:100%;height:auto;background:#0a1f32;border-radius:8px}select{background:#102d43;color:#f2faff;border:1px solid #547995;border-radius:7px;padding:7px}
+table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:9px 7px;border-bottom:1px solid #2b4a62;text-align:right;font-variant-numeric:tabular-nums}th:first-child,td:first-child{text-align:left}th{color:#aacbdf}#message{margin:9px 0;color:#fbd18d}.scroll{overflow-x:auto}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}.note{font-size:12px;color:#c7d8e7;margin-top:12px}
+@media(max-width:900px){.stats{grid-template-columns:1fr 1fr}.twocol{grid-template-columns:1fr}#map{height:380px}}@media(max-width:550px){h1{font-size:21px}}
+</style>
+</head>
+<body><main>
+<h1>SWIFT-ION <span style="color:#8bd3fc">Ionosonde Validation v0.9</span></h1>
+<p class="muted">公開イオノゾンデ観測とIRI気候モデルの地点・時刻一致比較</p>
+<nav><a href="./ionosphere.html">全球IRIモデル</a><a href="./quality.html">TEC品質管理</a><a href="./tec.html">SWIFT-TEC</a><a href="./index.html">メイン</a><a href="./ionosonde_validation.json">検証結果JSON</a></nav>
+<p class="warn"><b>研究・非運用用途。</b> これは観測時刻に再計算したIRIとイオノゾンデ観測との<b>モデル誤差</b>であり、将来予報の的中率ではありません。GIRO/INGVの観測は自動判読または手動判読の可能性があります。GIRO由来データは CC BY-NC-SA 4.0（非商用）で、観測局ごとの提供者表示が必要です。</p>
+<div class="card"><h2>データ取得・計算状況</h2><div id="message">読み込み中…</div><div class="stats" id="stats"></div><div class="note" id="meta"></div></div>
+<div class="twocol"><section class="card"><h2>観測地点の分布</h2><div id="map"></div><div class="note">位置は観測局の緯度・経度。点の色はIRIと観測の絶対差を示し、空間補間値ではありません。観測なしの場合は点を表示しません。</div></section><section class="card"><h2>IRIと観測の一致度</h2><label>指標 <select id="metric"><option value="fof2">foF2（MHz）</option><option value="hmf2">hmF2（km）</option></select></label><svg id="plot" viewBox="0 0 520 385" role="img" aria-label="IRIと観測の散布図"></svg><p class="small" id="plotnote"></p><div class="note">点線はIRI値＝観測値。hmF2のIRI側ピークは高度25 km刻みの探索であり、観測の解像度と異なります。ピークが探索範囲の端にある地点はhmF2集計から除外します。</div></section></div>
+<section class="card"><h2>観測局別の比較結果</h2><div class="scroll"><table><thead><tr><th>観測局</th><th>観測UTC</th><th>信頼度</th><th>foF2観測</th><th>IRI</th><th>差 MHz</th><th>hmF2観測</th><th>IRI</th><th>差 km</th></tr></thead><tbody id="rows"></tbody></table></div></section>
+<section class="card"><h2>出典・利用条件</h2><p>公開集約フィード：<a href="https://prop.kc2g.com/api/stations.json" target="_blank" rel="noopener">KC2G / GIRO station data</a>（Andrew Rodland, KC2G）。原データ：GIRO参加観測局・INGV等の提供機関。</p><p>公式：<a href="https://giro.uml.edu/didbase/RulesOfTheRoad.html" target="_blank" rel="noopener">GIRO Rules of the Road</a> ／ <a href="https://giro.uml.edu/didbase/acknowledgements.htm" target="_blank" rel="noopener">観測局提供者のAcknowledgements</a></p><p class="small">学術発表や外部共有の際は、各観測局の提供者を個別に確認・明記してください。これは観測局名のみから提供機関を確定するものではありません。本サイトの観測値由来の評価結果にはGIROの再配布・継承条件が適用され得ます。</p><details><summary>詳細な機械可読メタデータ</summary><pre id="rawmeta"></pre></details></section>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const map=L.map('map',{preferCanvas:true}).setView([15,0],2);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:8}).addTo(map);
+let data=null;
+const layer=L.layerGroup().addTo(map);
+const format=(x,dp=2)=>typeof x==='number'&&Number.isFinite(x)?x.toLocaleString('ja-JP',{maximumFractionDigits:dp}):'—';
+const svg=(tag,attrs,txt)=>{let el=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v]of Object.entries(attrs))el.setAttribute(k,v);if(txt!==undefined)el.textContent=txt;return el};
+function stat(v,title){const div=document.createElement('div');div.className='stat';const b=document.createElement('strong');b.textContent=v;const s=document.createElement('span');s.textContent=title;div.append(b,s);return div}
+function plot(metric){const root=$('plot');root.replaceChildren();if(!data)return;const key=metric==='fof2'?'fof2_mhz':'hmf2_km',obs=''+key,pred='iri_'+key;const records=data.stations.filter(s=>Number.isFinite(s[obs])&&Number.isFinite(s[pred])&&(metric!=='hmf2'||!s.peak_at_boundary));$('plotnote').textContent=`有効ペア ${records.length}地点 ／ モデル値 − 観測値（符号付き）`;
+ if(!records.length){root.append(svg('text',{x:260,y:185,fill:'#bed0df','text-anchor':'middle'},'比較できる地点がありません'));return}
+ const vals=records.flatMap(s=>[s[obs],s[pred]]),mn=Math.min(...vals),mx=Math.max(...vals),padding=Math.max(metric==='fof2'?0.3:10,(mx-mn)*0.12),lo=Math.max(0,mn-padding),hi=mx+padding,L=72,R=492,T=22,B=323,scale=x=>L+(x-lo)/(hi-lo)*(R-L),y=x=>B-(x-lo)/(hi-lo)*(B-T);
+ for(let i=0;i<=4;i++){let v=lo+(hi-lo)*i/4,px=scale(v),py=y(v);root.append(svg('line',{x1:L,y1:py,x2:R,y2:py,stroke:'#2a4860'}));root.append(svg('line',{x1:px,y1:T,x2:px,y2:B,stroke:'#29455d'}));root.append(svg('text',{x:L-9,y:py+5,'text-anchor':'end',fill:'#b7c9da','font-size':11},format(v,1)));root.append(svg('text',{x:px,y:B+17,'text-anchor':'middle',fill:'#b7c9da','font-size':11},format(v,1)))}
+ root.append(svg('line',{x1:scale(lo),y1:y(lo),x2:scale(hi),y2:y(hi),stroke:'#a5c6d9','stroke-dasharray':'6 5','stroke-width':1.5}));
+ for(const s of records){const e=s[pred]-s[obs],p=svg('circle',{cx:scale(s[obs]),cy:y(s[pred]),r:5.5,fill:Math.abs(e)>(metric==='fof2'?2:60)?'#ef926f':'#6cd0e6',stroke:'#061927','stroke-width':1});p.append(svg('title',{},`${s.station}: 観測 ${format(s[obs])} / IRI ${format(s[pred])}`));root.append(p)}
+ root.append(svg('text',{x:285,y:373,fill:'#d3e4f1','font-size':13,'text-anchor':'middle'},'イオノゾンデ観測 '+(metric==='fof2'?'[MHz]':'[km]')));
+ root.append(svg('text',{x:17,y:169,fill:'#d3e4f1','font-size':13,'text-anchor':'middle',transform:'rotate(-90 17 169)'},'IRI '+(metric==='fof2'?'[MHz]':'[km]')));
+}
+function render(){if(!data)return;const status=data.status,metric=$('metric').value,grp=data.metrics?.[metric]||{};$('message').textContent=`状態: ${status} — ${data.message||'—'}`;$('stats').replaceChildren(stat(data.evaluated_stations??0,'IRIと照合した観測局数'),stat(grp.sample_count??0,metric+' 有効ペア数'),stat(format(grp.mae),metric+' MAE ['+(metric==='fof2'?'MHz':'km')+']'),stat(format(grp.bias),metric+' Bias（IRI−観測）'));
+ const m=data.metadata||{};$('meta').textContent=`生成: ${m.generated_at||'—'} ／ 原データ収録数: ${data.input_station_records??0} ／ 対象選出: ${data.sampled_stations??0} ／ 不採用: ${JSON.stringify(data.skipped||{})}`;
+ $('rawmeta').textContent=JSON.stringify({metadata:m,status:data.status,skipped:data.skipped,errors:data.errors},null,2);
+ layer.clearLayers();const metricError=metric==='fof2'?'fof2_error_mhz':'hmf2_error_km';for(const s of data.stations||[]){const e=s[metricError];let fill=!Number.isFinite(e)?'#869eae':Math.abs(e)<(metric==='fof2'?1:30)?'#71d6af':Math.abs(e)<(metric==='fof2'?2:60)?'#ffcb7b':'#f07872';if(metric==='hmf2'&&s.peak_at_boundary)fill='#869eae';const marker=L.circleMarker([s.lat,s.lon],{radius:7,fillColor:fill,fillOpacity:0.9,weight:1,color:'#e5f2fa'}).addTo(layer);const div=document.createElement('div');const title=document.createElement('b');title.textContent=s.station;div.append(title,document.createElement('br'));div.append(document.createTextNode(`UTC ${s.observed_at} | 誤差 ${format(e)} ${metric==='fof2'?'MHz':'km'}`));marker.bindPopup(div)}
+ const body=$('rows');body.replaceChildren();for(const s of data.stations||[]){const tr=document.createElement('tr');for(const x of [s.station,s.observed_at,s.confidence==null?'不明':s.confidence,s.fof2_mhz,s.iri_fof2_mhz,s.fof2_error_mhz,s.hmf2_km,s.iri_hmf2_km,s.peak_at_boundary?'境界':s.hmf2_error_km]){const td=document.createElement('td');td.textContent=typeof x==='number'?format(x):String(x??'—');tr.append(td)}body.append(tr)}if(!body.children.length){let tr=body.insertRow(),td=tr.insertCell();td.colSpan=9;td.textContent='比較対象となる観測局がありません。';td.style.textAlign='left'}
+ plot(metric);
+}
+$('metric').onchange=render;
+fetch('./ionosonde_validation.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('ionosonde_validation.json HTTP '+r.status);return r.json()}).then(d=>{data=d;render()}).catch(e=>{$('message').textContent='読み込み失敗：'+e.message+'。GitHub ActionsのIonosonde verificationステップを確認してください。';$('stats').replaceChildren()});
+</script></body></html>
