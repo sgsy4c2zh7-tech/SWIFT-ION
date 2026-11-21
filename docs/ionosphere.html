@@ -1,3 +1,116 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SWIFT-ION | IRI model estimates</title><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><style>body{margin:0;background:#0d1928;color:#e9f2ff;font:14px system-ui}header{padding:16px}#map{height:70vh}select{padding:8px}a{color:#a3d8ff}.warn{color:#ffd485}#profile{padding:12px;white-space:pre-wrap}#legend{height:12px;width:280px;background:linear-gradient(90deg,#313695,#74add1,#ffffbf,#fdae61,#a50026)}</style></head><body><header><h2>SWIFT-ION — IRI electron density model</h2><p class="warn">IRIのモデル推定値。SWIFT-TECのTEC予報とは比較のみで、同化・各層の予報は未実装。D層は対象外。</p><label>指標 <select id="metric"><option value="nmf2_m3">NmF2 (m⁻³)</option><option value="hmf2_km">hmF2 (km)</option><option value="fof2_mhz">foF2 (MHz)</option><option value="iri_partial_tec_100_600_tecu">IRI partial TEC 100–600 km</option><option value="vtec_swifttec_tecu">SWIFT-TEC VTEC</option></select></label><p id="status">読み込み中…</p><div id="legend"></div><small>低 ← 指標値 → 高</small>　<a href="./tec.html">SWIFT-TECマップ</a></header><div id="map"></div><div id="profile">地点をクリックすると電子密度の鉛直プロファイルを表示します。</div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script>
-const map=L.map('map').setView([15,0],2),group=L.layerGroup().addTo(map);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors'}).addTo(map);let cells=[];const colors=['#313695','#74add1','#ffffbf','#fdae61','#a50026'];function render(){group.clearLayers();const key=document.getElementById('metric').value;const vals=cells.map(c=>key in c?c[key]:c.iri[key]).filter(Number.isFinite);if(!vals.length)return;const min=Math.min(...vals),max=Math.max(...vals);document.getElementById('status').textContent=`${cells.length} model cells | ${key}: ${min.toPrecision(3)}–${max.toPrecision(3)}`;for(const c of cells){const v=key in c?c[key]:c.iri[key];if(!Number.isFinite(v))continue;const k=Math.max(0,Math.min(4,Math.floor(5*(v-min)/(max-min||1))));L.circleMarker([c.lat,c.lon],{radius:7,stroke:false,fillColor:colors[k],fillOpacity:.9}).on('click',()=>{const p=c.profile;document.getElementById('profile').textContent=`Lat ${c.lat}, Lon ${c.lon}\nIRI NmF2=${c.iri.nmf2_m3.toExponential(3)} m⁻³ | hmF2=${c.iri.hmf2_km} km | foF2=${c.iri.fof2_mhz} MHz\n\nAltitude km | Ne m⁻³\n`+p.alt_km.map((h,i)=>`${h} | ${p.ne_m3[i].toExponential(3)}`).join('\n')}).addTo(group)}}document.getElementById('metric').onchange=render;fetch('./ionosphere.json').then(r=>{if(!r.ok)throw Error('IRIデータ未生成');return r.json()}).then(d=>{cells=d.frames[0]?.cells||[];if(!cells.length)throw Error('IRIセルなし');render()}).catch(e=>document.getElementById('status').textContent=e.message+'。IRIモデルを有効化・実行してください。');
-</script></body></html>
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SWIFT-ION | Global IRI & TEC Study v0.7</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#091525;color:#e8f0fa;font:14px system-ui,sans-serif}
+    header{padding:14px clamp(12px,3vw,28px);border-bottom:1px solid #31465a}h1{margin:0 0 10px;font-size:23px;letter-spacing:.01em}
+    .warn{color:#ffd889;line-height:1.55;margin:0 0 12px}.controls{display:flex;flex-wrap:wrap;align-items:end;gap:10px}
+    label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:#c1d7e9}select{font:inherit;padding:9px 12px;border:1px solid #526a84;border-radius:7px;background:#132c42;color:#fff;min-width:180px}
+    #status{margin:11px 0 6px;font-size:13px;color:#b4d4ea}.legend{height:13px;max-width:330px;background:linear-gradient(90deg,#313695,#74add1,#ffffbf,#fdae61,#a50026);border-radius:3px}
+    .scale{display:flex;justify-content:space-between;max-width:330px;font-size:12px;color:#b9cadb;padding-top:3px}
+    .links{display:flex;gap:16px;margin-top:9px;flex-wrap:wrap}a{color:#8dd5ff}
+    .layout{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(280px,1fr);height:min(73vh,770px)}#map{height:100%;min-height:390px;background:#14344d}
+    .side{overflow-y:auto;background:#0c1e30;padding:14px 16px;border-left:1px solid #324a62}h2{font-size:16px;margin:0 0 10px}
+    .pill{display:inline-block;border-radius:4px;background:#243e54;padding:3px 7px;margin:5px 0;font-size:12px}
+    .muted{color:#acc2d5;font-size:12px;line-height:1.6}#details{white-space:pre-wrap;line-height:1.7;font-variant-numeric:tabular-nums}
+    #graph{width:100%;height:auto;max-height:360px;background:#10283c;border-radius:8px;margin-top:10px}
+    .note{padding:8px 10px;background:#263343;border-left:3px solid #eab765;font-size:12px;margin:12px 0;line-height:1.5}
+    @media(max-width:800px){.layout{grid-template-columns:1fr;height:auto}#map{height:57vh}.side{min-height:380px;border-left:0}}
+  </style>
+</head>
+<body>
+<header>
+  <h1>SWIFT-ION <span style="color:#80cafa">Global IRI / TEC Study</span></h1>
+  <p class="warn">研究試験版：IRIモデルの気候値＋空間補間です。TECに整合させた値は仮定付き感度実験であり、検証済みの電子密度予報ではありません。D層は対象外。</p>
+  <div class="controls">
+    <label>対象時刻（UTC）<select id="time"></select></label>
+    <label>表示指標
+      <select id="metric">
+        <option value="iri_nmf2">IRI F2帯の最大電子密度 NmF2 [m⁻³]</option>
+        <option value="iri_hmf2">IRI F2帯の最大密度高度 hmF2 [km]</option>
+        <option value="iri_fof2">IRI foF2推定 [MHz]</option>
+        <option value="scenario_nmf2">TECスケーリング感度実験 NmF2 [m⁻³]</option>
+        <option value="scenario_fof2">TECスケーリング感度実験 foF2 [MHz]</option>
+        <option value="vtec">SWIFT-TEC VTEC [TECU]</option>
+      </select>
+    </label>
+  </div>
+  <div id="status">IRIデータを読み込み中…</div>
+  <div class="legend"></div><div class="scale"><span id="minval">低</span><span id="maxval">高</span></div>
+  <div class="links"><a href="./tec.html">SWIFT-TEC VTEC</a><a href="./map.html">合成デモ</a><a href="./index.html">メイン画面</a></div>
+</header>
+<div class="layout">
+  <div id="map"></div>
+  <aside class="side"><h2>地点別電子密度プロファイル</h2><div class="muted">地図の色付き格子をクリックすると、IRIの実計算地点における Ne(h) とTEC感度実験の比較を表示します。</div><div id="method" class="pill">未選択</div><div id="details"></div><svg id="graph" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 350" role="img" aria-label="電子密度と高度のグラフ"></svg><div class="note">補間地点をクリックした場合、グラフは最も近いIRI実計算地点のものです。TECスケーリングを行ってもピーク高度は変わりません。</div></aside>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+'use strict';
+const map = L.map('map',{preferCanvas:true,worldCopyJump:true}).setView([15,0],2);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:8}).addTo(map);
+const overlay=L.layerGroup().addTo(map);
+let dataset=null;
+const $=id=>document.getElementById(id);
+const palette=['#313695','#74add1','#ffffbf','#fdae61','#a50026'];
+const metricSpecs={
+ iri_nmf2:{lo:1e10,hi:3e12,log:true,label:'IRI NmF2',unit:'m⁻³',get:c=>c.iri?.nmf2_m3},
+ iri_hmf2:{lo:180,hi:520,label:'IRI hmF2',unit:'km',get:c=>c.iri?.hmf2_km},
+ iri_fof2:{lo:2,hi:17,label:'IRI foF2',unit:'MHz',get:c=>c.iri?.fof2_mhz},
+ scenario_nmf2:{lo:1e10,hi:3e12,log:true,label:'TEC感度実験 NmF2',unit:'m⁻³',get:c=>c.tec_scenario?.nmf2_m3},
+ scenario_fof2:{lo:2,hi:17,label:'TEC感度実験 foF2',unit:'MHz',get:c=>c.tec_scenario?.fof2_mhz},
+ vtec:{lo:0,hi:100,label:'SWIFT-TEC VTEC',unit:'TECU',get:c=>c.vtec_swifttec_tecu}
+};
+function valueStr(x){return x==null||!Number.isFinite(x)?'欠損':Math.abs(x)>=1e5?Number(x).toExponential(3):Number(x).toFixed(2)}
+function ratio(x,sp){if(!Number.isFinite(x))return null;const tr = v=>sp.log?Math.log10(Math.max(1,v)):v;return Math.max(0,Math.min(1,(tr(x)-tr(sp.lo))/(tr(sp.hi)-tr(sp.lo))))}
+function color(t){if(t===null)return null;const v=Math.min(3.99999,t*4),a=Math.floor(v),s=v-a;const x=palette[a].slice(1),y=palette[a+1].slice(1);let rgb=[];for(let i=0;i<3;i++){const n=parseInt(x.slice(i*2,i*2+2),16),m=parseInt(y.slice(i*2,i*2+2),16);rgb.push(Math.round(n+(m-n)*s).toString(16).padStart(2,'0'))}return '#'+rgb.join('')}
+function geoDist(a,b){const q=Math.PI/180,la=a.lat*q,lb=b.lat*q,co=(a.lon-b.lon)*q;return 6371*Math.acos(Math.max(-1,Math.min(1,Math.sin(la)*Math.sin(lb)+Math.cos(la)*Math.cos(lb)*Math.cos(co))))}
+function clearGraph(){while($('graph').firstChild)$('graph').removeChild($('graph').firstChild)}
+function svg(tag,attrs,text){const n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);if(text!=null)n.textContent=text;$('graph').appendChild(n);return n}
+function profileGraph(cell){clearGraph();if(!cell)return;const p=cell.profile, al=p.alt_km, old=p.ne_m3, changed=p.ne_m3_tec_scenario;
+ const minAlt=Math.min(...al),maxAlt=Math.max(...al),l=49,r=322,t=22,b=310;
+ const maxD=Math.max(...old,...(changed||[]),1e7),minLog=7,maxLog=Math.ceil(Math.log10(maxD));
+ const px=n=>l+(Math.log10(Math.max(n,1e7))-minLog)/Math.max(1,maxLog-minLog)*(r-l),py=h=>b-(h-minAlt)/(maxAlt-minAlt)*(b-t);
+ for(let h=minAlt;h<=maxAlt+0.01;h+=250){const y=py(h);svg('line',{x1:l,y1:y,x2:r,y2:y,stroke:'#324b5e','stroke-width':1});svg('text',{x:l-5,y:y+4,fill:'#d6e3ef','font-size':10,'text-anchor':'end'},String(h))}
+ for(let n=minLog;n<=maxLog;n++){const x=l+(n-minLog)/Math.max(1,maxLog-minLog)*(r-l);svg('line',{x1:x,y1:t,x2:x,y2:b,stroke:'#294154','stroke-width':1});svg('text',{x,y:b+13,fill:'#d6e3ef','font-size':10,'text-anchor':'middle'},'10^'+n)}
+ svg('text',{x:180,y:345,fill:'#d8e8f4','font-size':11,'text-anchor':'middle'},'Electron density [m⁻³] (log scale)');
+ svg('text',{x:13,y:160,fill:'#d8e8f4','font-size':11,transform:'rotate(-90 13 160)','text-anchor':'middle'},'Altitude [km]');
+ function line(v,stroke){svg('polyline',{points:v.map((ne,i)=>px(ne)+','+py(al[i])).join(' '),stroke,fill:'none','stroke-width':2.6})}
+ line(old,'#6fd5ff');if(changed)line(changed,'#ffbb70');
+ svg('text',{x:65,y:16,fill:'#6fd5ff','font-size':11},'IRI');if(changed)svg('text',{x:131,y:16,fill:'#ffbb70','font-size':11},'TEC sensitivity')
+}
+function showAt(point,frame){const candidates=frame.cells||[];if(!candidates.length)return;let nearest=candidates.reduce((best,c)=>geoDist(point,c)<geoDist(point,best)?c:best);
+ const dist=geoDist(point,nearest),exact=dist<1;
+ $('method').textContent=exact?'IRI実計算地点':`空間補間セル：IRI実計算地点まで ${Math.round(dist)} km`;
+ $('details').textContent=`選択位置：${point.lat.toFixed(1)}°, ${point.lon.toFixed(1)}°\n`+
+ `IRI計算位置：${nearest.lat.toFixed(1)}°, ${nearest.lon.toFixed(1)}°\n`+
+ `IRI NmF2（F2帯最大値）：${valueStr(nearest.iri.nmf2_m3)} m⁻³\n`+
+ `IRI hmF2（F2帯最大高度）：${valueStr(nearest.iri.hmf2_km)} km\n`+
+ `IRI foF2（推定）：${valueStr(nearest.iri.fof2_mhz)} MHz\n`+
+ `IRI 100–2000 km partial TEC：${valueStr(nearest.iri_partial_tec_100_2000_tecu)} TECU\n`+
+ `SWIFT-TEC VTEC：${valueStr(nearest.vtec_swifttec_tecu)} TECU\n`+
+ `感度実験係数：${nearest.scenario_factor??'対象外'}\n`+
+ `感度実験：${nearest.scenario_status}\n`+
+ `注：上記2つのTECは高度範囲が異なり、厳密な同じ物理量ではありません。`;
+ profileGraph(nearest)
+}
+function render(){if(!dataset)return;overlay.clearLayers();const frame=dataset.frames[Number($('time').value)];if(!frame)return;
+ const sp=metricSpecs[$('metric').value],points=frame.map_cells||[];let plotted=0,missing=0;
+ for(const c of points){const v=sp.get(c),f=ratio(v,sp);if(f===null){missing++;continue}const fill=color(f);const lat=c.lat,lon=c.lon;
+ const bounds=[[Math.max(-89.9,lat-5),lon-5],[Math.min(89.9,lat+5),lon+5]];
+ L.rectangle(bounds,{weight:c.method==='IRI_RUN'?0.7:0,opacity:0.65,color:'#daeaff',fillColor:fill,fillOpacity:c.method==='IRI_RUN'?0.82:0.62,interactive:true})
+   .on('click',()=>showAt(c,frame)).bindTooltip(`${sp.label}: ${valueStr(v)} ${sp.unit}<br>${c.method==='IRI_RUN'?'IRI実計算':'空間補間'}`,{sticky:true}).addTo(overlay);plotted++;
+ }
+ $('status').textContent=`UTC ${frame.valid_at} | IRI実計算 ${frame.stats.iri_computations}地点 / 全球表示 ${plotted}格子 | 補間 ${frame.stats.interpolated_points}格子 | 感度実験対象 ${frame.stats.tec_scenarios_accepted}地点 | 欠損 ${missing}`;
+ $('minval').textContent=valueStr(sp.lo)+' '+sp.unit; $('maxval').textContent=valueStr(sp.hi)+' '+sp.unit;
+}
+$('metric').onchange=render;$('time').onchange=()=>{clearGraph();$('details').textContent='';$('method').textContent='未選択';render()};
+fetch('./ionosphere.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('ionosphere.json が未生成（HTTP '+r.status+'）');return r.json()})
+.then(d=>{if(!d.frames?.length||!d.frames[0].map_cells?.length)throw Error('IRIデータに全球表示用の格子がありません');dataset=d;d.frames.forEach((f,i)=>$('time').add(new Option(f.valid_at,String(i))));render()})
+.catch(e=>{$('status').textContent='読み込み失敗：'+e.message+'。GitHub ActionsでIRI計算ステップを確認してください。'});
+</script>
+</body>
+</html>
