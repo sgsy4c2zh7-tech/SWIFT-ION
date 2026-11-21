@@ -1,8 +1,10 @@
-name: Build and publish research demo
+name: Build and publish SWIFT-ION
 on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '17,47 * * * *'
 permissions:
   contents: read
   pages: write
@@ -24,6 +26,13 @@ jobs:
       - run: python -m unittest discover -s tests -v
       - run: python scripts/build_demo.py
       - run: python scripts/build_map.py
+      - name: Import public SWIFT-TEC forecast if URL is configured
+        env:
+          SWIFT_TEC_CSV_URL: ${{ vars.SWIFT_TEC_CSV_URL }}
+        run: python scripts/sync_tec.py
+      - name: Import locally committed CSV if available and no automatic feed is configured
+        if: ${{ vars.SWIFT_TEC_CSV_URL == '' }}
+        run: python scripts/import_swift_tec_csv.py
       - uses: actions/configure-pages@v5
         with:
           enablement: true
