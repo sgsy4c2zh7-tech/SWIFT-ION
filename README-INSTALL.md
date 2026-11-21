@@ -1,51 +1,64 @@
-# SWIFT-ION v1.4 — ISEE Japan + GAIA-style 3D Explorer
+# SWIFT-ION v1.5 — GAIA-style Multilayer / Voxel / Isosurface Explorer
 
-既存の SWIFT-ION 自動更新・30分アニメーション・365日の精度履歴を維持して、3D Explorer に日本ISEE高解像度VTECと経路断面を追加するアップデートです。
+## Installation (preserves existing workflow)
 
-## 導入手順（GitHub Desktop）
+1. Back up your current `SWIFT-ION/docs/explorer.html` if desired.
+2. Extract this ZIP directly into the **root** of your existing `SWIFT-ION` repository, overwriting only matching files:
+   - `docs/explorer.html` (new 3D Cesium UI)
+   - `docs/shared/gaia3d.mjs` (math / IDW / marching tetrahedra)
+   - `docs/shared/gaia3d-app.mjs` (Cesium UI/rendering)
+   - `tests/test_gaia3d_js.py` (Python discovery wrapper for JS tests)
+   - `tests/test-gaia3d.mjs` (Node.js numerical tests)
+3. Do **NOT** replace your `.github/workflows/pages.yml`. This patch deliberately includes **no workflow file**.
+4. Commit in GitHub Desktop: `Add GAIA-style multilayer shells, volumetric voxels and IRI isosurfaces`
+5. Push to main and wait for your existing GitHub Pages workflow to finish.
+6. Open: `https://sgsy4c2zh7-tech.github.io/SWIFT-ION/explorer.html`
 
-1. この ZIP を展開する。
-2. 同梱の `.github/`・`docs/`・`scripts/`・`tests/` の4フォルダを **SWIFT-ION リポジトリのルートへ**コピーし、同名のものだけ上書きする。
-3. 特に `.github/workflows/pages.yml` は丸ごと上書きする。これは **以前の v1.3 の簡略化版ではなく、v1.2統合版のフル workflow を復元／維持した上で新しいIRI/ISEE生成ステップを1件追加したもの**。
-4. GitHub Desktopで `Add ISEE Japan and GAIA-style 3D route sections` をCommit、Push originする。
-5. GitHub Actions → `Build and publish SWIFT-ION` の成功を確認する。新ステップは `Build GAIA-style IRI and ISEE Japan explorer`。
-6. GitHub Pages: `https://sgsy4c2zh7-tech.github.io/SWIFT-ION/explorer.html`
+## Required existing pipeline
 
-## ファイル（このパッチで追加／上書き）
+The published `docs/explorer_data.json` from SWIFT-ION v1.4 is required.
+- schema `swift-ion-explorer-v1.4`
+- `global_frames[].sites[]` with `lat`, `lon`, `ne_log10_m3[]`
+- `japan.frames[].iri_sites[]` computed at the exact ISEE observation UTC
+- `japan.frames[].vtec` for **separately shown** observed-type ISEE VTEC [TECU]
+- `metadata.altitudes_km[]` (representative altitudes 100–1000 km)
 
-- `.github/workflows/pages.yml` : 現行の全自動パイプラインと365日保存を維持した**フルコード**。古いスタイルに戻したり、他のジョブ・履歴書き込みを消さない。
-- `scripts/build_3d_explorer.py` : 既存の **IRI実計算** `docs/ionosphere.json` を読み込み、必要ならISEEの記録時刻に追加のIRI計算を実施。
-- `docs/explorer.html` : 日本／全球切替、GAIA型立体点群、縦断面、水平高度スライス、地点別 Ne(h)、飛行経路断面、ISEE VTEC表示。Cesiumトークン／外部JS不要のCanvas描画。
-- `docs/index.html` : 既存の全機能カードを維持して、新しい3D Explorerへのカードとショートカットを追加。
-- `tests/test_3d_explorer.py` : 出典時刻、モデル種別、ISEE欠測、保存パス検証等の単体テスト。
+NOAA scripts, upstream SWIFT-TEC, 365-day history and ISEE/IRI generator are **not modified**.
 
-## 時間・物理量の取り扱い（重要）
+## Features
 
-- **Global IRI**：既存 `docs/ionosphere.json` の実計算Ne(h)をそのまま使います。80計算地点×5時刻の空間補間は高解像度の実測ではありません。
-- **Japan ISEE**：SWIFT-TECで既にGitに保存されている `_upstream_swifttec/docs/data/isee_tec/index.json` から観測 **VTEC [TECU]** を読みます。`docs/data/ai/isee_japan/...` のAI補正成績や学習係数とは別物です。
-- 最新アーカイブの `:00` / `:30` の最大3時刻を選び、**その時刻のIRI電子密度を日本の36地点で別途計算**します。ISEEに5分刻みしかない／欠測の場合は時刻を捏造しません。
-- ISEEの配信が何日も遅れる場合があります。画面に**観測UTCとソース年齢（時間）**を表示します。これはリアルタイムの日本3D電子密度ではありません。
-- 縦断面は実IRI計算地点に対する **空間IDW補間**です。地点から大きく離れる場合（日本域モデルで最寄りIRI地点から850km超）は補間しません。
-- 全球のVTEC比較は同じフレームの **SWIFT-TECモデルVTEC**、日本は同じ記録UTCの **ISEE観測系VTEC**。いずれもNe(h)そのものではありません。
-- GPS L1遅延（表示される場合）は垂直一次電離圏群遅延の計算例であり、航空機の航法可用性や実際の飛行経路のリスク予報ではありません。
-- GAIAの計算コード・出力を実際に使っているわけではありません。ここでいう「GAIA型」は高度断面など**表示の形式**を指し、科学的なモデルはIRI-2020です。
-- 以前のv1.3で作られた `docs/ionosphere_3d.json`（合成フォールバックデータ）は**新画面では読み込みません**。データがない場合は欠損を表示します。
-- SWIFT-TECのISEE「AI補正予報」の生成・接続は今回**未実装**です。追加したのは **ISEE AGRID2 VTECアーカイブ**の読み取りとIRI同時刻計算です。
+- **Single-height:** a semi-transparent, continuous IRI electron-density texture on a Cesium rectangle at a chosen height, with fixed color scale `log10 Ne = 8.0–12.8 m^-3`.
+- **Four shells:** checkable E (~125 km), F1 (~190 km), F2 (~300 km), topside (~650 km) representative height slices. Shared time and fixed legend, individual checkbox + individual opacity sliders + global opacity.
+- **Route curtain:** view the same selected IRI model time along a public/illustrative route. Great-circle route sampling, IDW interpolation; altitude-vs-distance section chart and 3D translucent curtain.
+- **Voxel preview:** up to ~900 coarse 3D box geometry instances filtered by the chosen electron density threshold. This is an IRI interpolation visualization, not measured 3D tomography.
+- **Isosurface:** marching tetrahedra on a reduced lat/lon/alt grid. Draw a mesh for selected `log10 Ne` threshold. This is true geometry extraction from a *model-interpolated field*, not a new assimilative physical product.
+- **Japan:** existing v1.4 ISEE VTEC readout, source age, and same-UTC IRI comparison retained. City selection includes locations across Japan.
 
-## 操作方法
+## Scientific cautions
 
-- **日本全国の地点**：札幌・仙台・東京・名古屋・大阪・広島・福岡・鹿児島・那覇の選択、または任意の緯度・経度を入力。
-- **経路**：東京–那覇、札幌–福岡、東京–大阪、仙台–名古屋、福岡–鹿児島、東京–シドニー（全球モデルを選択）、または任意2〜12点を緯度・経度で入力。
-- **ビュー**：3D地球／垂直断面／高度スライス／経路断面。地球をドラッグして回転可能。
-- **時間**：ISEEアーカイブの30分スロットを切替・再生。全球IRIはその実計算時刻のみ切替。
+- IRI-2020 **climatology** provides electron-density height profiles, not a verified forecast.
+- ISEE archived VTEC is a vertically integrated quantity; it is **not** 3D observed electron density. ISEE/VTEC and IRI/Ne are kept separate.
+- Smooth colors, interpolation, and isosurfaces do not add information beyond the sparse IRI sample sites. Near boundaries and over gaps, spatial uncertainty can be large.
+- F1 may not be a distinct physical peak at all times; shell labels are approximate altitude bands.
+- Not for operational aviation, GNSS, HF, military or safety decisions.
+- Cesium 3D and OpenStreetMap imagery require an internet-connected browser supporting WebGL.
 
-## 科学的・技術的制約
+## Tests
 
-- 本件は一般公開データによる研究表示です。機微な位置・実運用情報をGitHub Pagesへアップロードしないでください。
-- 新規のIRI計算は最大3時刻×36地点を追加するため、Actions実行時間は従来より増えます。時間が厳しい場合、`--regional-sites 24`、`--max-isee-frames 2` に下げられます。
-- ISEEデータが取得できない場合、新画面の **全球IRI** は表示できますが、日本のISEE機能は未利用可能になります。参照を捏造する処理はありません。
+```bash
+node --test tests/test-gaia3d.mjs
+python -m unittest discover -s tests -p 'test_gaia3d_js.py' -v
+```
 
-## 検証範囲
+The numerical tests exercise altitude interpolation, nearest site, source clipping, palette transparency, great-circle routes, and marching-tetrahedra isosurface generation. They do not certify the full Cesium visual outcome in a deployed browser. The existing workflow's Python test discovery automatically runs the `test_gaia3d_js.py` wrapper if Node.js is installed (GitHub Ubuntu hosted runners include Node.js).
 
-- Python単体テスト、workflow YAML読込、JavaScript構文検査、および**模擬JSONを使ったローカルChromiumの各画面操作**で動作確認。
-- **GitHub Actions本番のIRI実計算・最新ISEEファイル・GitHub Pagesへのデプロイは未実行**。公開後にActionsログをご確認ください。
+## If the display fails
+
+1. Open the `explorer.html` page and inspect its blue status panel.
+2. Check that `explorer_data.json` is available (GitHub Actions `Build GAIA-style IRI and ISEE Japan explorer` stage).
+3. Check browser developer console for Cesium/CDN/WebGL problems. Try **Single Height** and **Lightweight** resolution first.
+4. If there are no ISEE/IRI regional frames, Japan mode is unavailable and the interface falls back to Global IRI without inventing observed data.
+
+### Restore previous version
+
+Replace just `docs/explorer.html` with your previous version and remove `docs/shared/gaia3d.mjs` and `docs/shared/gaia3d-app.mjs` if no longer needed. The scientific data generation and workflow remain untouched.
