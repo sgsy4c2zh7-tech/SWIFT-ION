@@ -8,18 +8,18 @@ on:
     - cron: '17,47 * * * *'
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  group: swift-ion-publish-history
+  cancel-in-progress: false
 
 jobs:
   test-and-publish:
     runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    timeout-minutes: 55
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -117,28 +117,59 @@ jobs:
           print('Ionosonde status:', d['status'], 'matched:', d['evaluated_stations'])
           PY
 
-      - name: Decide whether to keep a history snapshot
-        id: snapshot
+      - name: Prepare rolling-year archive branch
         shell: bash
         run: |
-          hour=$(date -u +%H)
-          if [[ "$GITHUB_EVENT_NAME" != "schedule" ]] || (( 10#$hour % 6 == 0 )); then
-            echo "keep=true" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --heads origin swift-ion-history >/dev/null 2>&1; then
+            git fetch --no-tags origin refs/heads/swift-ion-history:refs/remotes/origin/swift-ion-history
+            git worktree add -b swift-ion-history _swift_ion_history origin/swift-ion-history
           else
-            echo "keep=false" >> "$GITHUB_OUTPUT"
+            git worktree add --orphan -b swift-ion-history _swift_ion_history
           fi
 
-      - name: Save run outputs (7-day snapshot)
-        if: steps.snapshot.outputs.keep == 'true'
+      - name: Record prospective IRI forecasts and score a rolling 365 days
+        run: |
+          python scripts/build_year_archive.py \
+            --observations docs/ionosonde_validation.json \
+            --history _swift_ion_history \
+            --docs docs
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('docs/year_accuracy.json').read_text(encoding='utf-8'))
+          assert r['metadata']['retention_days']==365
+          assert r['metadata']['is_swifttec_layer_forecast_skill'] is False
+          assert all(x['fof2']['hit_rate_percent'] is None or 0<=x['fof2']['hit_rate_percent']<=100
+                     for x in r['by_horizon'].values())
+          print('Rolling-year verification:', r['status'], r['total_matches'], 'matched records')
+          PY
+
+      - name: Commit 365-day history to dedicated branch
+        shell: bash
+        run: |
+          git -C _swift_ion_history config user.name 'github-actions[bot]'
+          git -C _swift_ion_history config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C _swift_ion_history add -A
+          if git -C _swift_ion_history diff --cached --quiet; then
+            echo 'No new verified history; existing archive preserved.'
+          else
+            git -C _swift_ion_history commit -m "Update station forecast and accuracy history ($GITHUB_RUN_ID)"
+            git -C _swift_ion_history push -u origin HEAD:refs/heads/swift-ion-history
+          fi
+
+      - name: Save short-term workflow diagnostics (7 days)
+        if: github.event_name != 'schedule'
         uses: actions/upload-artifact@v4
         with:
           name: swift-ion-results-${{ github.run_id }}
           path: |
-            docs/swift_tec_vtec.json
-            docs/ionosphere.json
             docs/quality.json
             docs/ionosonde_validation.json
+            docs/station_outlook.json
+            docs/prospective_skill.json
+            docs/year_accuracy.json
           retention-days: 7
+          if-no-files-found: error
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

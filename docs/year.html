@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SWIFT-ION | 365-day IRI baseline accuracy</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#081727;color:#e9f2ff;font:14px/1.6 system-ui,sans-serif}
+main{max-width:1260px;margin:auto;padding:24px 20px 60px}h1{font-size:27px;margin:0 0 6px}h2{font-size:19px;margin:0 0 10px}a{color:#91d9ff}
+nav{display:flex;flex-wrap:wrap;gap:16px;margin:12px 0 20px}.note{background:#25313f;padding:13px 15px;border-left:3px solid #f4ba73;border-radius:7px;color:#f7d9ae}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:16px 0}.card,.panel{padding:17px;background:#10283f;border:1px solid #284d69;border-radius:12px}.card b{display:block;font-size:25px;line-height:1.3}.card small{color:#aec7db}.panel{margin-top:16px}
+fieldset{border:0;padding:0;display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin:12px 0 20px}label{font-size:12px;color:#bcd3e4;display:flex;flex-direction:column;gap:3px}select{background:#09243a;color:#f3f9ff;border:1px solid #4f7392;border-radius:7px;padding:8px;min-width:160px}
+#chart{width:100%;height:auto;background:#0b2136;border-radius:9px;max-height:290px}table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px solid #2b4a63;text-align:right;font-variant-numeric:tabular-nums}th:first-child,td:first-child{text-align:left}th{color:#a6cae7}.scroll{overflow:auto}.small{color:#b7c9d8;font-size:12px}.error{color:#ffb5a9}
+@media(max-width:700px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}main{padding:16px 10px 40px}table{font-size:11px}}
+</style></head><body><main>
+<h1>SWIFT-ION <span style="color:#80cdfd">365-day Accuracy History</span></h1>
+<p>将来時刻に発表したIRI気候モデルのfoF2・hmF2推定値を、後から取得したイオノゾンデ観測と事後照合します。</p>
+<nav><a href="./skill.html">直近の予報照合</a><a href="./ionosonde.html">観測とIRI</a><a href="./ionosphere.html">全球モデル</a><a href="./quality.html">品質管理</a><a href="./year_daily.csv">日別CSV</a><a href="./year_monthly.csv">月別CSV</a></nav>
+<div class="note"><b>研究用・暫定的中率。</b> foF2は誤差±1 MHz以内、hmF2は±30 km以内を「的中」と定義。未観測・データ欠損は母数に入れません。値はIRI気候モデルの基準推定であり、SWIFT-TEC補正後の各層予報精度ではありません。履歴は導入後に蓄積される365日間のローリング保存です。</div>
+<p id="status">データ読み込み中…</p>
+<fieldset><label>予報リードタイム<select id="horizon"><option value="1">1時間</option><option value="3">3時間</option><option value="6">6時間</option><option value="12">12時間</option><option value="24">24時間</option></select></label><label>評価項目<select id="metric"><option value="fof2">foF2（MHz）</option><option value="hmf2">hmF2（km）</option></select></label><label>期間<select id="period"><option value="30">直近30日</option><option value="90">直近90日</option><option value="365">365日</option></select></label></fieldset>
+<div class="cards"><div class="card"><b id="hit">—</b><small>的中率</small></div><div class="card"><b id="count">—</b><small>評価済みペア</small></div><div class="card"><b id="mae">—</b><small>MAE</small></div><div class="card"><b id="bias">—</b><small>Bias（IRI−観測）</small></div></div>
+<section class="panel"><h2>日別的中率の推移</h2><p class="small">点はその日の有効ペアが1件以上あった場合にのみ表示。データがない日の値を0%にはしません。</p><svg id="chart" viewBox="0 0 900 285" role="img" aria-label="Daily hit rate history"></svg></section>
+<section class="panel"><h2>月別集計</h2><div class="scroll"><table><thead><tr><th>月（UTC）</th><th>有効ペア</th><th>的中</th><th>的中率</th><th>MAE</th><th>RMSE</th><th>Bias</th></tr></thead><tbody id="months"></tbody></table></div></section>
+<section class="panel"><h2>集計・出典</h2><p class="small" id="meta"></p><p class="small">データ出典：KC2G集約のGIRO/INGV由来イオノゾンデ。非商用研究用。原観測局の謝辞・再配布条件に従ってください。1観測・同一リードタイムにつき重複は1件に統一します。履歴ブランチでの365日保存はアクティブファイルを対象とし、削除前のGitコミットには古い内容が残る場合があります。</p><p><a href="./year_accuracy.json">機械可読JSON</a> ／ <a href="https://giro.uml.edu/didbase/RulesOfTheRoad.html">GIRO利用条件</a></p></section>
+</main><script>
+'use strict';const $=x=>document.getElementById(x);let payload=null;
+function fmt(x,prec=2){return typeof x==='number'&&Number.isFinite(x)?x.toLocaleString('ja-JP',{minimumFractionDigits:0,maximumFractionDigits:prec}):'—'}
+function S(tag,attr={},content){const x=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v]of Object.entries(attr))x.setAttribute(k,v);if(content!==undefined)x.textContent=content;return x}
+function render(){if(!payload)return;const horizon=$('horizon').value,metric=$('metric').value,period=Number($('period').value);const today=payload.metadata.window_end_utc;const daily=payload.daily.filter(x=>String(x.horizon_h)===horizon).slice(-period);const valid=daily.map(r=>r.summary?.[metric]).filter(m=>m&&m.sample_count>0);const denom=valid.reduce((a,m)=>a+m.sample_count,0);const hits=valid.reduce((a,m)=>a+m.hit_count,0);const summary={sample_count:denom,hit_rate_percent:denom?100*hits/denom:null,mae:null,bias:null};if(period===365){Object.assign(summary,payload.by_horizon[horizon]?.[metric]||{});}else if(denom){
+  summary.mae=valid.reduce((a,m)=>a+m.sample_count*m.mae,0)/denom;
+  summary.bias=valid.reduce((a,m)=>a+m.sample_count*m.bias,0)/denom;
+  summary.rmse=Math.sqrt(valid.reduce((a,m)=>a+m.sample_count*m.rmse*m.rmse,0)/denom);
+}
+ $('hit').textContent=fmt(summary.hit_rate_percent)+'%';if(summary.hit_rate_percent==null)$('hit').textContent='—';
+ $('count').textContent=fmt(summary.sample_count,0);$('mae').textContent=summary.mae==null?'—':fmt(summary.mae)+' '+(metric==='fof2'?'MHz':'km');$('bias').textContent=summary.bias==null?'—':fmt(summary.bias)+' '+(metric==='fof2'?'MHz':'km');
+ const chart=$('chart');chart.replaceChildren();const L=55,R=875,T=15,B=245;for(let t=0;t<=4;t++){const v=t*25,y=B-v/100*(B-T);chart.append(S('line',{x1:L,x2:R,y1:y,y2:y,stroke:'#385772'}));chart.append(S('text',{x:L-8,y:y+4,'text-anchor':'end',fill:'#bfd7ea','font-size':12},v+'%'))}
+ const points=[];daily.forEach((row,i)=>{const val=row.summary?.[metric]?.hit_rate_percent;if(typeof val!=='number')return;const x=L+(R-L)*(i+0.5)/Math.max(1,daily.length),y=B-val/100*(B-T);points.push([x,y,row.day_utc,val]);});
+ for(let i=1;i<points.length;i++){let prev=points[i-1],cur=points[i];const dprev=daily.findIndex(x=>x.day_utc===prev[2]),dcur=daily.findIndex(x=>x.day_utc===cur[2]);if(dcur!==dprev+1)continue;chart.append(S('line',{x1:prev[0],y1:prev[1],x2:cur[0],y2:cur[1],stroke:'#71c8ee','stroke-width':2}))}
+ for(const [x,y,day,val]of points){let dot=S('circle',{cx:x,cy:y,r:3,fill:'#ffc47c'});dot.append(S('title',{},`${day} ${fmt(val)}%`));chart.append(dot)}chart.append(S('text',{x:L,y:267,fill:'#bdcfdb','font-size':12},daily[0]?.day_utc||'—'));chart.append(S('text',{x:R,y:267,fill:'#bdcfdb','font-size':12,'text-anchor':'end'},daily.at(-1)?.day_utc||'—'));
+ const monthly=payload.monthly.filter(x=>String(x.horizon_h)===horizon).slice().reverse();const body=$('months');body.replaceChildren();for(const row of monthly){const s=row.summary[metric],tr=body.insertRow();const values=[row.month_utc,s.sample_count,s.hit_count,s.hit_rate_percent==null?'—':fmt(s.hit_rate_percent)+'%',fmt(s.mae),fmt(s.rmse),fmt(s.bias)];for(const v of values){const td=tr.insertCell();td.textContent=String(v)}}}
+for(const id of ['horizon','metric','period'])$(id).addEventListener('change',render);
+fetch('./year_accuracy.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('year_accuracy.json HTTP '+r.status);return r.json()}).then(data=>{payload=data;const m=data.metadata||{};$('status').textContent=`状態: ${data.status} | 評価済み照合 ${data.total_matches}件 | 観測あり ${data.unique_observation_days_with_matches}日 | 保存対象 ${m.window_start_utc} 〜 ${m.window_end_utc}`;$('meta').textContent=`生成: ${m.generated_at} ／ 保存日数: ${m.retention_days} ／ 出典: ${m.source_license} ／ 全リードタイムの合算は独立な母数ではありません。`;render()}).catch(e=>{$('status').className='error';$('status').textContent='年次履歴の読み込みに失敗: '+e.message+'。GitHub ActionsのRecord prospective... / Commit 365-day history を確認してください。'});
+</script></body></html>

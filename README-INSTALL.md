@@ -1,25 +1,62 @@
-# SWIFT-ION v0.9.1: KC2G time parsing / bad_shape repair
+# SWIFT-ION v1.1 — 365-day forecast & hit-rate history
 
-## Why
-The displayed ionosonde report read 101 records but dropped all as `bad_shape`. The original `parse_stations` classified failures parsing `time` as `bad_shape`. The upstream KC2G `Measurement.time` model uses a timezone-naive SQL `DateTime`; its Marshmallow serialization may therefore supply ISO-8601 timestamps with no `Z` or UTC offset. This is a probable root cause, not yet verified against the actual 101 raw records.
+## Purpose
 
-## Change
-- For **KC2G station records only**, interpret ISO time without an offset as **UTC** (explicit source-specific assumption); retain offset-aware conversion when supplied.
-- Classify invalid timestamps separately as `bad_timestamp`.
-- Add safe `schema_diagnostic` (field names/types only) to the output and the Action log when data are unusable.
-- Preserve original station filters: observations 6h max age, CS minimum 70 when present, nonzero valid foF2/hmF2, location and longitude validation; no synthetic fallback.
-- Include 8 focused regression tests.
-- No changes to SWIFT-TEC calculation, IRI, GitHub Actions, or public HTML required.
+Adds long-lived **rolling 365-day** retention of ionosonde station outlooks, verified
+observations and matched predictions to branch `swift-ion-history`. Uses UTC and
+keeps issue time, valid time, station, confidence, model and lead. A separate
+Git branch avoids modifying SWIFT-TEC and prevents adding binary/large archive
+files to `main`/GitHub Pages. Initial deployment does **not** invent old forecasts.
 
-## Install
-1. Extract this ZIP. Copy `scripts/` and `tests/` **into the SWIFT-ION repo root**, overwriting `scripts/validate_ionosondes.py` only.
-2. GitHub Desktop Summary: `Fix KC2G ionosonde UTC timestamp parsing`.
-3. Commit to main -> Push origin. Github Actions automatically rebuilds and deploys.
-4. Inspect `Ionosonde verification against IRI climatology` and https://sgsy4c2zh7-tech.github.io/SWIFT-ION/ionosonde.html.
-5. If still 0 stations, look in the Action log for `Rejected record counts` and `SCHEMA_DIAGNOSTIC`, and on the page for reason-specific counts. Do not loosen time/confidence constraints before understanding the actual data.
+### Hit-rate definitions (configurable scientific thresholds)
+- foF2 hit: `abs(forecast_fof2 - ionosonde_fof2) <= 1 MHz`.
+- hmF2 hit: `abs(forecast_hmf2 - ionosonde_hmf2) <= 30 km`.
+- Each metric has separate denominator and is `null` when no valid pairs.
+- Also saves MAE, RMSE, bias and sample sizes by UTC day/month and nominal
+  lead 1/3/6/12/24 hours. They are **IRI climatology baseline** estimates,
+  not SWIFT-TEC-corrected ionosphere forecasts or validated operational skill.
 
-## Validation
-Local tests: `python -m unittest discover -s tests -v` (in full repo), or this patch's `python -m unittest discover -s tests -v`. The package was tested with 8 new regression cases, but access to live KC2G feed from the sandbox was unavailable, so the real fetch/IRI run remains to be verified by GitHub Actions.
+## Installation (GitHub Desktop)
 
-## Attribution / operational limitations
-Data from KC2G derived from GIRO/INGV. Respect noncommercial/attribution requirements. foF2/hmF2 is **IRI model vs observed station** at measurement time, NOT a validated future forecast. Source datetime policy is a deliberate assumption that must be rechecked if upstream source changes.
+1. Extract this ZIP to a temporary folder.
+2. Merge `.github`, `scripts`, `tests`, `docs` into your **SWIFT-ION repo root**.
+   Overwrite `.github/workflows/pages.yml`; DO NOT replace SWIFT-TEC itself.
+3. In GitHub Desktop commit: `Add rolling 365-day IRI forecast and accuracy history`.
+4. Push origin. On GitHub, check **Settings > Actions > General > Workflow permissions**.
+   The workflow needs **Read and write permissions** so it can write the separate
+   `swift-ion-history` branch; the workflow explicitly requests `contents: write`.
+5. Check Actions: `Prepare rolling-year archive branch`, `Record prospective...`,
+   `Commit 365-day history...`, and `Deploy GitHub Pages`.
+6. Open `https://sgsy4c2zh7-tech.github.io/SWIFT-ION/year.html`.
+   Latest short-term view: `.../skill.html`.
+
+## How persistence works
+
+- The archive branch has gzipped daily JSONL for `outlooks/`, `observations/`,
+  and `matches/`, plus a README. Only the **active files** from the most recent
+  365 days are retained. Earlier versions could still exist in Git history;
+  removal from all commit history would require a separate purge operation.
+- History is reloaded each scheduled run, checked for duplicates and compared
+  to the latest released KC2G/GIRO-derived observations. A newly produced
+  forecast cannot be scored immediately against observations from the future.
+- GitHub Actions snapshots may still expire in 7 days; **the Git branch is the
+  actual 365-day retention store**. Branch protection or disabled workflow
+  permissions can prevent writes; monitor the `Commit` step.
+- `docs/year_accuracy.json`, `docs/year_daily.csv`, `docs/year_monthly.csv`
+  are rebuilt for the website. The branch remains separate from Pages.
+- Data availability, nominal/actual lead mismatch, sampling gaps, and future
+  corrections must be communicated when interpreting a hit rate.
+- Use is noncommercial research only. GIRO/INGV/KC2G attribution/permission
+  obligations still apply for stored/public evaluation data.
+
+## Test locally
+
+Within the existing SWIFT-ION repository:
+
+```
+python -m unittest discover -s tests -v
+```
+
+New scripts are pure Python 3.11 stdlib, but the IRI-2020 runtime is required
+when actually running future outlook issuance. Passing local offline tests
+**does not** prove successful 365-day storage on GitHub Actions.

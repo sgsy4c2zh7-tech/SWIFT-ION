@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SWIFT-ION | Prospective IRI Baseline Evaluation</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#081626;color:#e6f0fc;font:14px/1.6 system-ui,-apple-system,sans-serif}main{max-width:1210px;margin:auto;padding:24px 18px 70px}
+h1{font-size:27px;line-height:1.3;margin:0 0 12px}.sky{color:#80ccff}.sub{color:#b5cbe0}.warn{border-left:3px solid #e3b879;background:#292e39;border-radius:5px;padding:12px 15px;margin:14px 0 22px;color:#ffe0a0}
+nav{display:flex;flex-wrap:wrap;gap:15px;margin:14px 0 25px}a{color:#8ed7ff}.panel{border:1px solid #2d4863;background:#10263c;border-radius:12px;padding:18px;margin-bottom:16px}h2{font-size:17px;margin:0 0 14px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.stat{padding:13px;background:#193a52;border-radius:8px}.stat b{display:block;font-size:25px}.stat small{color:#b5cad8}.tag{border:1px solid #415c74;padding:4px 8px;border-radius:6px;font-size:12px;color:#b4daec}
+.small{font-size:12px;color:#a9c2d6}.scroll{overflow:auto}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}th,td{border-bottom:1px solid #30485f;padding:10px 11px;text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{color:#a1c3dd}td.empty{text-align:left;color:#c2d0dc}#chart{width:100%;height:275px;background:#091f31;border-radius:7px}
+#status{color:#d9bc79;margin:10px 0}details{padding:8px 0}summary{cursor:pointer}.method{font-size:12px;color:#c7d5e1;max-width:850px}@media(max-width:650px){.stats{grid-template-columns:1fr 1fr}h1{font-size:22px}}
+</style>
+</head>
+<body><main>
+<h1>SWIFT-ION <span class="sky">Prospective IRI Evaluation v1.0</span></h1>
+<p class="sub">事前発表したIRI基準推定値と、その後に届いたイオノゾンデ観測をUTC時刻・観測局で照合する研究ページ。</p>
+<nav><a href="./year.html">年間的中率</a><a href="./ionosphere.html">全球IRI</a><a href="./ionosonde.html">同時刻IRI対観測</a><a href="./quality.html">TEC品質管理</a><a href="./tec.html">SWIFT-TEC</a><a href="./index.html">メイン</a><a href="./prospective_skill.json">評価JSON</a><a href="./station_outlook.json">今回の発表値</a></nav>
+<div class="warn"><b>評価対象はIRIの気候モデルによる事前推定値です。</b> SWIFT-TECでTEC補正した電子密度予報の評価ではありません。観測値の時刻にIRIを再計算した従来の検証と区別しています。GIRO由来データは非商用・出典表示条件があります。運用判断には使えません。</div>
+<p id="status">発表・評価履歴を読み込み中…</p>
+<section class="panel"><h2>予報検証の状態</h2><div class="stats" id="stats"><div class="stat">読み込み中</div></div><p class="small" id="meta"></p></section>
+<section class="panel"><h2>発表リードタイム別評価</h2><p class="method">基準時刻から1、3、6、12、24時間後以降のUTC正時を対象に事前計算。観測時刻と±30分以内、同一観測局（距離25 km以内）、かつ発表時刻が観測より30分以上前のペアのみ。複数の発表が一致した場合は最新1件だけを採用します。</p>
+<div class="scroll"><table><thead><tr><th>公称リード</th><th>一致局数</th><th>foF2 MAE (MHz)</th><th>foF2 RMSE</th><th>foF2 Bias</th><th>hmF2 MAE (km)</th><th>hmF2 RMSE</th><th>hmF2 Bias</th></tr></thead><tbody id="rows"></tbody></table></div>
+<svg id="chart" viewBox="0 0 900 275" role="img" aria-label="リードタイム別foF2 MAE"><text x="30" y="42" fill="#b5cbe0">データ取得中</text></svg>
+<p class="small">10件未満の比較は参考値のみ。サンプル数が少ない場合、精度改善の判断に使用できません。Bias = IRI − 観測。</p></section>
+<section class="panel"><h2>照合された直近の観測局</h2><div class="scroll"><table><thead><tr><th>観測局</th><th>観測UTC</th><th>発表UTC</th><th>対象UTC</th><th>リード</th><th>foF2 観測/IRI</th><th>hmF2 観測/IRI</th></tr></thead><tbody id="matches"></tbody></table></div></section>
+<section class="panel"><h2>データ出典と制約</h2><p class="method">観測局と観測値はKC2G経由のGIRO/INGV由来。IRI-2020は気候モデルであり、今回の計算は将来時刻に対するモデル基準値を発表したもので、嵐時変動の専用予報やTEC同化モデルではありません。専用Gitブランチに365日間の発表値・観測値・照合記録を保存します。履歴が存在しない場合は未評価として扱います。</p>
+<p><a href="https://giro.uml.edu/didbase/RulesOfTheRoad.html">GIRO利用規約</a> ・ <a href="https://giro.uml.edu/didbase/acknowledgements.htm">観測局提供者への謝辞</a></p>
+<details><summary>機械可読メタデータ</summary><pre id="raw"></pre></details></section>
+</main>
+<script>
+'use strict';const $=x=>document.getElementById(x);let skill=null,outlook=null;
+const fmt=(n,dp=2)=>Number.isFinite(n)?Number(n).toLocaleString('ja-JP',{maximumFractionDigits:dp}):'—';
+function stat(n,label){const x=document.createElement('div');x.className='stat';const a=document.createElement('b');a.textContent=n;const b=document.createElement('small');b.textContent=label;x.append(a,b);return x}
+function fillTable(body,rows,empty,columns){body.replaceChildren();if(!rows.length){let tr=body.insertRow(),td=tr.insertCell();td.colSpan=columns;td.className='empty';td.textContent=empty;return;}for(const row of rows){const tr=body.insertRow();for(const txt of row){const td=tr.insertCell();td.textContent=String(txt);}}}
+function drawChart(data){const el=$('chart');el.replaceChildren();const d=Object.entries(data).map(([h,v])=>({h:Number(h),y:v.fof2?.mae,n:v.fof2?.count||0})).filter(x=>Number.isFinite(x.y));const ns='http://www.w3.org/2000/svg';function svg(tag,attrs,txt){const e=document.createElementNS(ns,tag);for(const [k,v]of Object.entries(attrs))e.setAttribute(k,v);if(txt!==undefined)e.textContent=txt;el.append(e)}if(!d.length){svg('text',{x:35,y:135,fill:'#bdd4e6','font-size':17},'比較可能な過去発表値がまだありません');return}const max=Math.max(1,...d.map(x=>x.y)),bottom=223,top=30,left=60,right=865;
+ for(let i=0;i<=4;i++){const y=bottom-(bottom-top)*i/4;svg('line',{x1:left,x2:right,y1:y,y2:y,stroke:'#314b62'});svg('text',{x:53,y:y+5,'text-anchor':'end',fill:'#b4cbdd','font-size':12},fmt(max*i/4))}
+ d.forEach((r,i)=>{const width=Math.min(100,(right-left)/Math.max(1,d.length)-32),cx=left+(i+.5)*(right-left)/d.length,height=(bottom-top)*r.y/max;svg('rect',{x:cx-width/2,y:bottom-height,width,height,fill:r.n<10?'#e1b377':'#66cdea',rx:4});svg('text',{x:cx,y:bottom+22,'text-anchor':'middle',fill:'#d4e6f6','font-size':13},`${r.h} h`);svg('text',{x:cx,y:bottom-height-7,'text-anchor':'middle',fill:'#e7effb','font-size':12},`${fmt(r.y)} (n=${r.n})`)})}
+async function render(){const [s,o]=await Promise.all([fetch('./prospective_skill.json',{cache:'no-store'}),fetch('./station_outlook.json',{cache:'no-store'})]);if(!s.ok||!o.ok)throw Error(`公開JSON未生成: score ${s.status}, outlook ${o.status}`);skill=await s.json();outlook=await o.json();
+ $('status').textContent=`評価: ${skill.status} / 履歴: ${skill.history_status||'—'} / 今回のIRI発表: ${outlook.status}`;
+ $('stats').replaceChildren(stat(fmt(outlook.station_count,0),'今回の対象観測局'),stat(fmt(outlook.forecasts?.length||0,0),'将来時刻IRI推定値'),stat(fmt(skill.snapshot_count,0),'過去発表アーカイブ'),stat(fmt(skill.matched_count,0),'時間・位置一致ペア'));
+ $('meta').textContent=`今回発表 UTC: ${outlook.metadata?.issued_at||'—'} ／ 評価生成 UTC: ${skill.metadata?.generated_at||'—'} ／ 事後検証であり将来時刻の観測値は使っていません。`;
+ const hr=Object.entries(skill.horizons||{});fillTable($('rows'),hr.map(([h,g])=>[h+' h',fmt(g.matched_stations,0),fmt(g.fof2?.mae),fmt(g.fof2?.rmse),fmt(g.fof2?.bias),fmt(g.hmf2?.mae),fmt(g.hmf2?.rmse),fmt(g.hmf2?.bias)]),'前回以前の発表値と一致する観測がまだありません。',8);
+ fillTable($('matches'),(skill.matches||[]).slice(0,25).map(m=>[m.station,m.observed_at,m.issued_at,m.valid_at,m.nominal_horizon_h+' h',`${fmt(m.observed_fof2_mhz)} / ${fmt(m.predicted_fof2_mhz)}`,`${fmt(m.observed_hmf2_km)} / ${fmt(m.predicted_hmf2_km)}`]),'時間・位置条件に一致する観測はまだありません。',7);
+ drawChart(skill.horizons||{});$('raw').textContent=JSON.stringify({evaluation:skill.metadata,outlook:outlook.metadata,skipped:skill.skipped},null,2);
+}
+render().catch(e=>{$('status').textContent='読込失敗: '+e.message});
+</script>
+</body></html>
