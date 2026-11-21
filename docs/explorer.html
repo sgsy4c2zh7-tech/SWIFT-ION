@@ -4,7 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#081524">
 <meta name="description" content="SWIFT-ION | GAIA-style multilayer ionosphere explorer">
-<title>SWIFT-ION | Multilayer GAIA-style 3D Explorer v1.5</title>
+<title>SWIFT-ION | Ionosphere Forecast Cinema v1.6</title>
 <script>window.CESIUM_BASE_URL='https://cdn.jsdelivr.net/npm/cesium@1.133.0/Build/Cesium/';</script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.133.0/Build/Cesium/Widgets/widgets.css">
 <script defer src="https://cdn.jsdelivr.net/npm/cesium@1.133.0/Build/Cesium/Cesium.js"></script>
@@ -40,21 +40,35 @@ button{cursor:pointer;color:var(--fg);border:1px solid #47718a;background:#193b5
 .strong{color:var(--gold);font-weight:650}.pill{font-size:10px;background:#153c58;padding:3px 7px;border:1px solid #36718e;border-radius:15px}
 .checkline{display:flex;align-items:center;gap:8px;color:#cbdfee;font-size:11px}
 .footer{margin-top:14px;color:#a9c5d5;font-size:11px}
+#seek{width:100%;accent-color:#69d9ee}
+.workspace:fullscreen{display:flex;flex-direction:column;overflow:auto;width:100vw;height:100vh;padding:10px;background:#061522}
+.workspace:fullscreen #globe{flex:1 1 auto;min-height:42vh;height:auto;max-height:none}
+.workspace:fullscreen .graphs{flex:0 0 auto;grid-template-columns:1fr 1fr}
+.workspace:fullscreen .graphs canvas{height:160px}
+@media(max-width:650px){.workspace:fullscreen .graphs{grid-template-columns:1fr}.workspace:fullscreen .graphs canvas{height:120px}}
 @media(max-width:1150px){.shell{grid-template-columns:235px minmax(0,1fr)}.inspector{grid-column:1/-1;border-left:none;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.inspector>*{min-width:0}}
 @media(max-width:750px){.shell{display:block}.sidebar,.inspector{border:none;border-bottom:1px solid var(--line)}.inspector{display:block}.workspace{padding:10px}.graphs{grid-template-columns:1fr}#globe{min-height:330px;height:50vh}.brand{font-size:16px}}
+.fsbar{display:none;align-items:center;flex-wrap:wrap;gap:7px;background:#0c2d42;border:1px solid #2e536d;padding:7px 10px;border-radius:8px;margin-bottom:7px}.fsbar input{flex:1;min-width:85px;accent-color:#6bdcf0}.fsbar span{font-size:11px;color:#b7d9ed}.workspace:fullscreen .fsbar{display:flex}
 </style>
 </head>
 <body>
-<header class="top"><div><div class="overline">SWIFT-ION / Spatial modeling research</div><div class="brand">IONOSPHERE <b>MULTILAYER 3D</b> <span class="pill">v1.5</span></div></div><nav class="headlinks"><a href="./index.html">ホーム</a><a href="./animate.html">30分VTEC動画</a><a href="./year.html">365日精度</a><a href="./ionosonde.html">観測比較</a></nav></header>
+<header class="top"><div><div class="overline">SWIFT-ION / Spatial modeling research</div><div class="brand">IONOSPHERE <b>MULTILAYER 3D</b> <span class="pill">v1.6 • 30-min forecast</span></div></div><nav class="headlinks"><a href="./index.html">ホーム</a><a href="./animate.html">30分VTEC動画</a><a href="./field.html">foF2 / hmF2 予報動画</a><a href="./route.html">foF2飛行経路動画</a><a href="./year.html">365日精度</a><a href="./ionosonde.html">観測比較</a></nav></header>
 <div class="shell">
 <aside class="sidebar">
 <h2>DATA / MODEL TIME</h2>
-<div class="field"><label for="source">計算・観測データの選択</label><select id="source"><option value="japan">日本：ISEE VTEC + 同時刻IRI</option><option value="global">全球：IRI + SWIFT-TEC参照</option></select></div>
+<div class="field"><label for="source">計算・観測データの選択</label><select id="source"><option value="japan">日本：ISEE VTEC + 同時刻IRI</option><option value="global">全球：IRI + SWIFT-TEC参照（従来）</option><option value="forecast-global">全球：30分 IRI＋TEC連動予報（実験）</option><option value="forecast-japan">日本：30分 IRI＋TEC連動予報（実験）</option></select></div>
 <div class="field"><label for="frame">表示UTC時刻</label><select id="frame"></select></div>
-<div class="compact-row"><button id="prev">◀</button><button id="play" class="primary">▶ 再生</button><button id="next">▶</button></div>
+<div class="compact-row"><button id="prev" title="前の時刻">◀ 1コマ</button><button id="play" class="primary">▶ 再生</button><button id="next" title="次の時刻">1コマ ▶</button></div>
+<div class="field"><label for="seek">動画タイムライン <span id="timeCounter">—</span></label><input id="seek" type="range" min="0" max="0" value="0" step="1" aria-label="時刻のスライダー"></div>
+<div class="field"><label for="speed">再生速度</label><select id="speed"><option value="0.5">0.5 フレーム/秒</option><option value="1" selected>1 フレーム/秒</option><option value="2">2 フレーム/秒</option></select></div>
+<div class="field"><label for="modelVariant">予報モデルの比較（30分予報のみ）</label><select id="modelVariant"><option value="iri">IRI基準（将来時刻の気候モデル）</option><option value="tec">TEC連動シナリオ（条件を満たす地点のみ）</option></select></div>
 <p id="sourceNote" class="note">データ準備中</p>
 <hr>
-<h2>VISUAL APPEARANCE</h2>
+<h2>EARTH MAP / FULLSCREEN</h2>
+<div class="field"><label for="basemap">球体に貼る地図</label><select id="basemap"><option value="osm">OpenStreetMap 地図</option><option value="satellite">衛星画像（Esri World Imagery）</option><option value="grid">緯度経度グリッド（オフライン可）</option></select></div>
+<button id="fullscreen" style="width:100%">⛶ 3D画面＋断面を全画面表示</button>
+<p class="note">標準地図・衛星画像のタイル読込にはネット接続が必要です。地図は地球表面、電子密度シェルは上空に描画します。</p>
+<hr><h2>VISUAL APPEARANCE</h2>
 <div class="field"><label for="alt">単一高度 <b id="altValue">300 km</b></label><input id="alt" type="range" min="100" max="1000" step="25" value="300"></div>
 <div class="field"><label for="palette">カラーマップ</label><select id="palette"><option value="turbo">Turbo — 鮮やか</option><option value="viridis">Viridis — 科学表示</option><option value="plasma">Plasma — 紫〜黄</option><option value="thermal">Thermal — 青緑〜赤</option></select></div>
 <div class="field"><label for="opacity">透明度 <b id="opacityValue">62%</b></label><input id="opacity" type="range" min="15" max="100" value="62" step="5"></div>
@@ -77,12 +91,13 @@ button{cursor:pointer;color:var(--fg);border:1px solid #47718a;background:#193b5
 <div class="status" id="status" role="status">IRI / ISEEデータを読み込み中…</div>
 </aside>
 <main class="workspace">
+<div class="fsbar"><button id="fsPrev">◀</button><button id="fsPlay">▶ 再生</button><button id="fsNext">▶</button><input type="range" min="0" max="0" value="0" id="fsSeek" aria-label="全画面表示中の30分時刻"/><span id="fsTime">— UTC</span><button id="fsExit">⤢ 戻る</button></div>
 <div class="section-title"><div><strong id="viewTitle">3D IONOSPHERE / LAYERED FIELD</strong><div class="overline" id="viewSub">IRI-2020 climatology · spatial interpolation</div></div>
-<div class="modes"><button class="active" data-mode="single">単一高度</button><button data-mode="multi">4層シェル</button><button data-mode="section">断面</button><button data-mode="voxel">Voxel</button><button data-mode="iso">Isosurface</button></div></div>
+<div class="modes"><button class="active" data-mode="single">単一高度</button><button data-mode="multi">4層シェル</button><button data-mode="section">断面</button><button data-mode="voxel">Voxel</button><button data-mode="iso">Isosurface</button><button data-mode="fof2">foF2予報</button><button data-mode="hmf2">hmF2予報</button></div></div>
 <div id="globe"><div id="overlayTitle">IRI climatology ・ 高度に配置した補間テクスチャ（実測3Dではありません）</div></div>
 <div class="legendbar"><span>電子密度 log₁₀ Ne [m⁻³]</span><b>8.0</b><div id="ramp" class="gradient"></div><b>12.8</b><span id="renderInfo" class="muted">—</span></div>
 <div class="graphs"><div class="graph"><h3 id="sectionTitle">縦断面：高度 × 経路距離</h3><canvas id="sectionCanvas" class="plot" role="img" aria-label="高度別電子密度の垂直断面"></canvas></div><div class="graph"><h3>選択地点の Ne(h)</h3><canvas id="profileCanvas" class="plot" role="img" aria-label="地点別電子密度プロファイル"></canvas></div></div>
-<div class="footer">半透明のシェルはIRIの高度別電子密度を水平方向にIDW補間したもの。高解像度の表示は、新たな観測や物理モデルの情報量を生みません。ISEEは別途VTEC観測として表示し、IRIのモデル密度とは混同しません。</div>
+<div class="footer">全表示モードが同じ時刻スライダーと再生ボタンに連動。foF2はIRIのNmF2から算出した基準値とTEC一様倍率補正シナリオ、hmF2はIRIの基準推定のみ（TECから高さは補正できません）。半透明のシェルはIRIの高度別電子密度を水平方向にIDW補間したもの。高解像度の表示は、新たな観測や物理モデルの情報量を生みません。ISEEは別途VTEC観測として表示し、IRIのモデル密度とは混同しません。</div>
 </main>
 <aside class="inspector">
 <section><h2>MODEL / DATA STATUS</h2><div class="statgrid"><div class="stat"><div class="number" id="nSites">—</div><small>IRI実計算地点</small></div><div class="stat"><div class="number" id="frameTime">—</div><small>UTC時刻</small></div><div class="stat"><div class="number" id="nCells">—</div><small>描画メッシュセル</small></div><div class="stat"><div class="number" id="nLevels">—</div><small>表示する高度面</small></div></div><p class="info" id="sourceMeta">—</p></section>

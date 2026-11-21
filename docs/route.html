@@ -1,0 +1,134 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#071827">
+<title>SWIFT-ION | Flight Route foF2 Forecast Cinema</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+:root{color-scheme:dark;--bg:#071827;--panel:#0e293f;--edge:#2c526b;--muted:#b3cddd;--hi:#79d9f1;--gold:#ffd280}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:#e8f6ff;font:14px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif}a{color:#92e1ff}
+header{padding:14px clamp(14px,3vw,32px);background:#0e273c;border-bottom:1px solid var(--edge)}h1{margin:0;font-size:23px}nav{display:flex;gap:15px;flex-wrap:wrap;margin-top:9px;font-size:12px}
+.notice{color:#ffe0ac;background:#262c36;border-left:3px solid #dbaa68;padding:9px 11px;margin:12px 0;font-size:12px;line-height:1.6}
+.control{display:flex;align-items:end;flex-wrap:wrap;gap:9px;background:#0a2336;padding:12px clamp(14px,3vw,32px)}button,select,textarea,input{font:inherit;color:#eaf6ff;border:1px solid #456c86;background:#173a52;border-radius:8px;padding:8px 10px}
+button{cursor:pointer}button:disabled{opacity:.45;cursor:default}.primary{background:#147f99;border-color:#33c5d8}label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+#workspace{padding:12px clamp(12px,2vw,25px);max-width:1650px;margin:auto}body:fullscreen{background:var(--bg);overflow:auto;width:100%;height:100%}body:fullscreen #workspace{max-width:unset}body:fullscreen #map{height:55vh}
+.timeline{display:flex;align-items:center;gap:14px;margin:0 0 10px}#seek{flex:1;min-width:90px;accent-color:var(--hi)}#time{font-size:12px;color:#ace8ff;font-variant-numeric:tabular-nums}
+.view{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(280px,1fr);gap:11px}#map{height:46vh;min-height:350px;border-radius:12px;border:1px solid var(--edge);background:#082235;z-index:0}
+.panel{background:#0d293f;border:1px solid var(--edge);border-radius:12px;overflow:hidden}.panel h2{font-size:14px;margin:0;padding:9px 12px;border-bottom:1px solid #31516b}
+.panel canvas{width:100%;height:46vh;min-height:350px;display:block;background:#071a2b}
+#curtain{height:230px;min-height:0}.bottom{margin-top:11px;display:grid;grid-template-columns:1fr 1fr;gap:11px}.bottom .panel canvas{height:230px;min-height:0}
+.info{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:10px}.stat{padding:10px;background:#133047;border:1px solid var(--edge);border-radius:9px}.stat strong{font-size:19px;display:block}.stat small{color:var(--muted)}
+#status{padding:9px 12px;font-size:12px;color:#bdd9e9;white-space:pre-wrap}.small{font-size:12px;color:var(--muted);line-height:1.6}
+#routeText{font:12px/1.5 ui-monospace,monospace;width:min(240px,100%);min-height:70px;resize:vertical}
+.ramp{height:10px;margin:6px 0 0;background:linear-gradient(90deg,#0d1b55,#255bc0,#28aadb,#31d1ab,#e3e767,#ff9b28,#c8283d);border-radius:8px}
+@media(max-width:930px){.view,.bottom{grid-template-columns:1fr}.panel canvas{height:300px;min-height:260px}.info{grid-template-columns:repeat(2,1fr)}}
+</style></head><body>
+<header><h1>SWIFT-ION <span style="color:var(--hi)">foF2 Flight Route Forecast</span></h1>
+<nav><a href="./index.html">ホーム</a><a href="./field.html">foF2全球アニメーション</a><a href="./explorer.html">GAIA 3D・多層</a><a href="./animate.html">VTEC動画</a><a href="./year.html">365日的中率</a></nav></header>
+<div class="control">
+<label>経路プリセット<select id="preset"><option value="tokyo-naha">東京 → 那覇</option><option value="sapporo-fukuoka">札幌 → 福岡</option><option value="sendai-osaka">仙台 → 大阪</option><option value="fukuoka-kagoshima">福岡 → 鹿児島</option><option value="tokyo-sydney">東京 → シドニー</option><option value="custom">座標を入力</option></select></label>
+<label>経路座標（緯度, 経度）<textarea id="routeText">35.68,139.76
+26.21,127.68</textarea></label>
+<button id="applyRoute">経路を更新</button>
+<label>表示量<select id="metric"><option value="fof2">foF2 [MHz]</option><option value="hmf2">hmF2 [km]（IRI基準）</option><option value="ne">高度別Ne [log₁₀ m⁻³]</option></select></label>
+<label>電子密度表示高度<select id="height"><option value="150">150 km</option><option value="200">200 km</option><option value="250">250 km</option><option value="300" selected>300 km</option><option value="350">350 km</option><option value="400">400 km</option><option value="500">500 km</option><option value="600">600 km</option></select></label>
+<label>比較モデル<select id="variant"><option value="iri">IRI基準</option><option value="tec">SWIFT-TEC連動シナリオ</option></select></label>
+<label>サンプリング時間<select id="travel"><option value="snapshot">経路全体を同一UTCで比較</option><option value="passage">移動経路の通過時刻で比較</option></select></label>
+<label>仮の所要時間<input id="duration" type="number" value="3" min="0.5" max="36" step="0.5" style="width:80px" disabled/></label>
+<label>再生速度<select id="speed"><option value="0.5">0.5 fps</option><option value="1" selected>1 fps</option><option value="2">2 fps</option><option value="4">4 fps</option></select></label>
+</div>
+<div id="workspace">
+<div class="notice">本画面は公開都市・架空経路を対象にした研究モデルの可視化。<b>foF2はF2層の臨界周波数であり、航空通信の最適周波数／MUF／通信可否を直接示しません。</b> IRIの将来時刻における気候モデル推定と、TEC一様倍率感度シナリオを切替表示します。hmF2はTECで補正しません。</div>
+<div class="timeline"><button id="play" class="primary" disabled>▶ 再生</button><button id="prev" disabled>◀</button><button id="next" disabled>▶</button><input id="seek" type="range" min="0" max="0" value="0" step="1" disabled aria-label="予報30分タイムライン"><span id="time">— UTC</span><button id="fullscreen">⛶ 全画面</button></div>
+<div class="view">
+  <div class="panel"><h2>経路と地点別foF2（背景の地図は地理情報のみ）</h2><div id="map"></div></div>
+  <div class="panel"><h2 id="chartTitle">経路距離 × foF2予報 [MHz]</h2><canvas id="profile"></canvas></div>
+</div>
+<div class="bottom">
+  <div class="panel"><h2>飛行経路上の電子密度の鉛直断面（IRI基準／シナリオ）</h2><canvas id="curtain"></canvas></div>
+  <div class="panel"><h2>経路サンプリングの凡例・時刻</h2><div style="padding:12px"><div>低い <span id="scaleLow">1</span><div class="ramp"></div>高い <span id="scaleHigh">18 MHz</span></div><p id="status" role="status">予報データを読み込み中…</p><p class="small">時刻はUTC。通過時刻モードでは各距離地点のUTCを推定所要時間でずらします。予報範囲の外や補正条件を満たさない地点は欠測として表示します。</p></div></div>
+</div>
+<div class="info"><div class="stat"><strong id="nValid">—</strong><small>有効サンプル／61</small></div><div class="stat"><strong id="mean">—</strong><small>平均 foF2 / 選択量</small></div><div class="stat"><strong id="minmax">—</strong><small>最小〜最大（有効地点のみ）</small></div><div class="stat"><strong id="length">—</strong><small>大圏経路距離</small></div></div>
+<p class="small">数値は疎なIRI計算地点の距離重み付き補間。高度別Ne断面は同じ時刻条件で計算します。正確な気象ルート、飛行時間、HF電波伝搬、航空機の通信・航法性能を予測するものではありません。</p>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+import {parseRoute,valid,rgba,clamp} from './shared/gaia3d.mjs';
+import {PRESET_ROUTES,profileAlongRoute,routeSummary,computeRoute,sampleSpacetime} from './shared/route-forecast.mjs';
+const $=id=>document.getElementById(id);
+const p={data:null,route:PRESET_ROUTES['tokyo-naha'],i:0,timer:null,map:null,track:null,segments:[],markers:[],samples:[],curtain:[]};
+function unit(){return $('metric').value==='hmf2'?'km':$('metric').value==='ne'?'log₁₀ m⁻³':'MHz'}
+function limits(){return $('metric').value==='hmf2'?[150,550]:$('metric').value==='ne'?[8,12.8]:[1,18]}
+function rgb(v,range=limits()){const t=clamp((v-range[0])/(range[1]-range[0]),0,0.9999);const a=[[11,18,75],[34,81,185],[30,156,211],[54,204,154],[181,229,82],[255,210,49],[253,115,33],[211,40,50]],x=t*(a.length-1),i=Math.floor(x),f=x-i;const c=a[i].map((z,k)=>Math.round(z*(1-f)+a[i+1][k]*f));return `rgb(${c})`}
+function fmt(x,n=2){return valid(x)?x.toFixed(n):'—'}
+function stop(){if(p.timer){clearInterval(p.timer);p.timer=null}$('play').textContent='▶ 再生'}
+function step(d){p.i=(p.i+d+p.data.frames.length)%p.data.frames.length;draw()}
+function start(){stop();p.timer=setInterval(()=>step(1),1000/Number($('speed').value));$('play').textContent='⏸ 停止'}
+function compute(){return profileAlongRoute(p.data,p.route,p.i,{metric:$('metric').value,variant:$('variant').value,alt:Number($('height').value),region:'global',travel:$('travel').value==='passage',durationHours:Number($('duration').value)})}
+function refreshMap(){if(!p.map)return;
+ for(const x of p.segments)p.map.removeLayer(x);p.segments=[];
+ const v=p.samples;
+ for(let i=1;i<v.length;i++){
+  let a=v[i-1],b=v[i];const ok=valid(a.value)&&valid(b.value);
+  const poly=L.polyline([[a.lat,a.lon],[b.lat,b.lon]],{color:ok?rgb((a.value+b.value)/2):'#8297aa',weight:ok?6:3,opacity:ok?.85:.4,dashArray:ok?null:'4 5'}).addTo(p.map);
+  p.segments.push(poly)
+ }
+ for(const x of p.markers)p.map.removeLayer(x);p.markers=[];
+ for(let i=0;i<v.length;i+=10){const s=v[i];let marker=L.circleMarker([s.lat,s.lon],{radius:5,color:'#e5f7ff',weight:1,fillColor:valid(s.value)?rgb(s.value):'#526070',fillOpacity:.95}).addTo(p.map);
+  marker.bindTooltip(`${fmt(s.value)} ${unit()} • ${s.valid_at}`,{sticky:true});p.markers.push(marker)}
+}
+function axes(ctx,w,h,l=52,t=16,r=w-12,b=h-42){ctx.strokeStyle='#466b7d';ctx.strokeRect(l,t,r-l,b-t);return {l,t,r,b}}
+function setupCanvas(id){const c=$(id),w=Math.max(320,c.clientWidth),h=Math.max(210,c.clientHeight),d=Math.min(2,devicePixelRatio||1);c.width=Math.round(w*d);c.height=Math.round(h*d);const ctx=c.getContext('2d');ctx.setTransform(d,0,0,d,0,0);ctx.fillStyle='#081929';ctx.fillRect(0,0,w,h);return {ctx,w,h}}
+function drawChart(){const {ctx,w,h}=setupCanvas('profile'),z=axes(ctx,w,h),[lo,hi]=limits(),v=p.samples;
+ ctx.lineWidth=1;ctx.font='11px system-ui';ctx.fillStyle='#a9cddd';
+ for(let k=0;k<=4;k++){let val=lo+(hi-lo)*k/4,y=z.b-(z.b-z.t)*k/4;ctx.strokeStyle='#2e4960';ctx.beginPath();ctx.moveTo(z.l,y);ctx.lineTo(z.r,y);ctx.stroke();ctx.fillText(fmt(val,1),5,y+4)}
+ ctx.lineWidth=2.4;let prev=null;
+ for(let i=0;i<v.length;i++){const s=v[i],x=z.l+(z.r-z.l)*i/(v.length-1);if(!valid(s.value)){prev=null;continue}
+  const y=z.b-(z.b-z.t)*clamp((s.value-lo)/(hi-lo),0,1);
+  if(prev){ctx.strokeStyle=rgb((s.value+prev.v)/2);ctx.beginPath();ctx.moveTo(prev.x,prev.y);ctx.lineTo(x,y);ctx.stroke()}
+  prev={x,y,v:s.value}
+ }
+ ctx.fillStyle='#d5eaf5';ctx.fillText('0 km',z.l,h-18);ctx.textAlign='right';ctx.fillText(fmt(v.at(-1)?.km,0)+' km',z.r,h-18);ctx.textAlign='left';
+}
+function drawCurtain(){const {ctx,w,h}=setupCanvas('curtain'),z=axes(ctx,w,h,55,18,w-14,h-30);const v=p.samples,alts=p.data.altitudes_km;
+ if(v.length<2)return;
+ const frame=p.data.frames[p.i],t0=Date.parse(frame.valid_at),duration=Number($('duration').value);
+ const total=v.at(-1).km;
+ const nx=61,ny=45,low=document.createElement('canvas');low.width=nx;low.height=ny;const lc=low.getContext('2d'),pixels=lc.createImageData(nx,ny);
+ for(let y=0;y<ny;y++)for(let x=0;x<nx;x++){
+  const s=v[x],hkm=100+(ny-y-.5)*900/ny,ms=t0+($('travel').value==='passage'?s.km/total*duration*3600000:0);
+  const a=sampleSpacetime(p.data,s.lat,s.lon,ms,'ne',$('variant').value,hkm,'global'),c=valid(a)?rgb(a,[8,12.8]).match(/\d+/g).map(Number):null,k=(y*nx+x)*4;
+  if(c)pixels.data.set([...c,235],k);
+ }
+ lc.putImageData(pixels,0,0);ctx.imageSmoothingEnabled=true;ctx.drawImage(low,z.l,z.t,z.r-z.l,z.b-z.t);
+ ctx.strokeStyle='#466b7d';ctx.strokeRect(z.l,z.t,z.r-z.l,z.b-z.t);
+ ctx.fillStyle='#cee8f2';ctx.font='11px system-ui';ctx.fillText('1000km',5,z.t+4);ctx.fillText('100km',7,z.b);ctx.fillText('0km',z.l,h-7);ctx.textAlign='right';ctx.fillText(fmt(total,0)+'km',z.r,h-7);ctx.textAlign='left';
+}
+function draw(){if(!p.data)return;
+ p.samples=compute();const st=routeSummary(p.samples),frame=p.data.frames[p.i],lo=limits();
+ $('time').textContent=frame.valid_at.replace('.000Z','Z');$('seek').value=p.i;
+ $('chartTitle').textContent=`大圏経路距離 × ${$('metric').value} [${unit()}]`;
+ $('scaleLow').textContent=String(lo[0]);$('scaleHigh').textContent=String(lo[1])+' '+unit();
+ $('nValid').textContent=st.n+' / '+p.samples.length;
+ $('mean').textContent=fmt(st.mean);$('minmax').textContent=fmt(st.min)+' – '+fmt(st.max);
+ $('length').textContent=fmt(p.samples.at(-1).km,0)+' km';
+ $('status').textContent=`予報開始UTC: ${frame.valid_at}\nモデル: ${$('variant').value==='tec'?'TEC連動感度シナリオ':'IRI将来時刻基準'} | `+
+  `比較時間: ${$('travel').value==='passage'?'経路通過時刻（仮の所要時間 '+$('duration').value+' 時間）':'同一時刻'}\n`+
+  `有効値の割合: ${(100*st.coverage).toFixed(1)}% • ${frame.is_prospective?'発表時刻より未来':'発表時刻より前の参考再生'}。欠測は灰色。`;
+ refreshMap();drawChart();drawCurtain();
+}
+function routeChanged(){try{p.route=parseRoute($('routeText').value);const outline=computeRoute(p.route);const bounds=L.latLngBounds(outline.map(x=>[x.lat,x.lon]));p.map?.fitBounds(bounds.pad(.15),{maxZoom:6});if(p.data)draw()}catch(e){$('status').textContent='経路エラー: '+e.message}}
+$('preset').onchange=()=>{const x=PRESET_ROUTES[$('preset').value];if(x){$('routeText').value=x.map(v=>v.join(',')).join('\n');routeChanged()}};
+$('applyRoute').onclick=routeChanged;
+for(const id of ['metric','variant','height','travel','duration'])$(id).onchange=()=>{if(id==='travel')$('duration').disabled=$('travel').value!=='passage';if(p.data)draw()};
+$('play').onclick=()=>p.timer?stop():start();$('prev').onclick=()=>{stop();step(-1)};$('next').onclick=()=>{stop();step(1)};
+$('seek').oninput=()=>{stop();p.i=Number($('seek').value);draw()};$('speed').onchange=()=>{if(p.timer)start()};
+$('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.body.requestFullscreen()}catch(e){$('status').textContent='全画面にできません: '+e.message}};
+document.addEventListener('fullscreenchange',()=>{setTimeout(()=>{p.map?.invalidateSize();if(p.data)draw()},150);$('fullscreen').textContent=document.fullscreenElement?'⤢ 全画面終了':'⛶ 全画面'});
+window.addEventListener('resize',()=>{if(p.data)draw()});window.addEventListener('pagehide',stop);
+try{if(!window.L)throw Error('Leaflet が読み込めません');
+ p.map=L.map('map',{worldCopyJump:true,maxZoom:8,zoomControl:true}).setView([34,135],5);
+ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:8}).addTo(p.map);
+ const path=computeRoute(p.route);p.map.fitBounds(L.latLngBounds(path.map(x=>[x.lat,x.lon])).pad(.15),{maxZoom:6});
+ const res=await fetch('./ion_forecast.json',{cache:'no-store'});if(!res.ok)throw Error('ion_forecast.json HTTP '+res.status);
+ const data=await res.json();if(data.schema!=='swift-ion-iri-tec-forecast-v1'||!data.frames?.length)throw Error(data.status||'予報データ未生成');
+ p.data=data;$('seek').max=String(data.frames.length-1);for(const id of ['play','prev','next','seek'])$(id).disabled=false;draw();
+}catch(e){$('status').textContent='読み込み失敗: '+e.message+'。GitHub Actionsの Build 30-minute ionosphere forecast cinema を確認。'}
+</script></body></html>

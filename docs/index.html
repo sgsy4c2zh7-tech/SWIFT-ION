@@ -1,117 +1,13 @@
-<!doctype html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#081522">
-  <meta name="description" content="SWIFT-ION: 全球電離圏・宇宙天気・航空経路影響・予報精度検証の研究用ポータル">
-  <title>SWIFT-ION | ホーム / Research Portal</title>
-  <style>
-    :root { color-scheme: dark; --bg:#071522; --panel:#0e293e; --panel2:#102d43; --line:#26475d; --text:#e9f4ff; --muted:#b6cedf; --accent:#83dbff; --aqua:#80e2c2; --gold:#f5c47e; }
-    *,*::before,*::after { box-sizing:border-box; }
-    html { scroll-behavior:smooth; }
-    body { margin:0; font:15px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
-    a { color:inherit; }
-    a:focus-visible,input:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-    .skip { position:absolute; z-index:10; background:#173b53; padding:9px 15px; left:15px; top:-90px; }
-    .skip:focus { top:10px; }
-    .topbar { border-bottom:1px solid #21425c; background:#081b2c; }
-    .topbar .wrap { display:flex; justify-content:space-between; align-items:center; min-height:49px; gap:15px; }
-    .brand-small { font-size:13px; font-weight:800; letter-spacing:.17em; color:#a9ddfb; }
-    .topbar nav { display:flex; flex-wrap:wrap; gap:15px; }
-    .topbar nav a { color:#c1d9e9; text-decoration:none; font-size:12px; }
-    .topbar nav a:hover { color:#fff; text-decoration:underline; }
-    .wrap { max-width:1480px; padding-left:clamp(16px,4vw,56px); padding-right:clamp(16px,4vw,56px); margin:auto; }
-    header { padding:54px 0 37px; border-bottom:1px solid #25465e; background:radial-gradient(ellipse at 88% 0%,#184d66 0%,transparent 43%),linear-gradient(115deg,#092a42,#071522 75%); }
-    .eyebrow { margin:0 0 10px; color:var(--aqua); font-size:12px; font-weight:750; letter-spacing:.19em; text-transform:uppercase; }
-    h1 { margin:0; font-size:clamp(38px,5vw,63px); line-height:1.14; letter-spacing:.025em; }
-    h1 em { color:var(--accent); font-style:normal; }
-    header .lead { max-width:860px; margin:18px 0 8px; color:#d1e4f1; font-size:clamp(15px,1.6vw,18px); }
-    .sublead { max-width:970px; margin:0; color:var(--muted); font-size:13px; }
-    .disclaimer { border:1px solid #68553e; border-left:4px solid var(--gold); border-radius:9px; background:#302e2d; color:#f0d9b8; padding:13px 16px; max-width:1100px; margin-top:26px; font-size:12px; }
-    main { padding-top:29px; padding-bottom:65px; }
-    .quicknav { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; padding:14px 17px; border:1px solid var(--line); background:#0c2437; border-radius:11px; }
-    .quicknav strong { font-size:13px; }
-    .jump { display:flex; flex-wrap:wrap; gap:9px; }
-    .jump a { display:inline-block; border:1px solid #355c73; border-radius:22px; color:#cae5f4; padding:5px 12px; text-decoration:none; font-size:12px; }
-    .jump a:hover { background:#1b4660; }
-    section { scroll-margin-top:25px; margin-top:37px; }
-    .section-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:12px; margin-bottom:14px; }
-    h2 { margin:0; font-size:21px; }
-    .section-head p { margin:0; color:var(--muted); font-size:12px; }
-    .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
-    .tile { display:flex; flex-direction:column; gap:10px; text-decoration:none; background:linear-gradient(140deg,var(--panel2),#0b2539); border:1px solid #2e556d; border-radius:14px; padding:20px; min-height:203px; box-shadow:0 6px 18px rgba(0,0,0,.08); transition:transform .14s ease,border-color .14s ease,background-color .14s ease; }
-    .tile:hover { transform:translateY(-3px); border-color:#80cbeb; background:#133950; }
-    .headrow { display:flex; gap:12px; align-items:center; }
-    .tile-icon { width:45px; height:45px; flex:0 0 45px; display:grid; place-items:center; border-radius:12px; background:#194b61; color:#9fe1ff; font-size:22px; }
-    .tile:nth-child(3n+2) .tile-icon { background:#244c4a; color:#b6eacb; }
-    .tile:nth-child(3n) .tile-icon { background:#4a403b; color:#f2d1a0; }
-    .tile h3 { margin:0; font-size:17px; line-height:1.4; }
-    .tag { display:block; font-size:10px; line-height:1.5; color:#9ed9f8; letter-spacing:.11em; font-weight:700; margin-top:3px; }
-    .tile p { margin:0; color:#c4d7e5; font-size:13px; flex:1; }
-    .go { align-self:flex-start; color:var(--accent); font-weight:700; font-size:12px; }
-    .note { display:flex; align-items:flex-start; gap:12px; padding:15px 18px; background:#0d2639; border:1px solid #31516a; border-radius:11px; margin-top:37px; color:#bcd1df; font-size:12px; }
-    .note strong { color:#d9efff; }
-    footer { border-top:1px solid var(--line); padding:22px 0 35px; color:#9fb8cb; font-size:12px; }
-    @media(max-width:1000px) {.grid { grid-template-columns:repeat(2,minmax(0,1fr)); }}
-    @media(max-width:660px) { .grid { grid-template-columns:1fr; } header { padding:34px 0 29px; } .tile { min-height:170px; } .topbar nav { gap:10px; } }
-    @media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } .tile { transition:none; } .tile:hover { transform:none; } }
-  </style>
-</head>
-<body>
-  <a class="skip" href="#main">メインメニューへ移動</a>
-  <div class="topbar"><div class="wrap">
-    <span class="brand-small">SWIFT-ION / RESEARCH PORTAL</span>
-    <nav aria-label="上部ショートカット"><a href="./animate.html">30分アニメーション</a><a href="./impact.html">飛行経路解析</a><a href="./explorer.html">3D電離圏</a><a href="./year.html">365日的中率</a></nav>
-  </div></div>
-  <header><div class="wrap">
-    <p class="eyebrow">Ionosphere · Space Weather · Aviation · Verification</p>
-    <h1>SWIFT<em>—ION</em></h1>
-    <p class="lead">全球電離圏・宇宙天気研究の統合ホーム。見たい機能を選ぶだけで、それぞれの専用画面へ移動できます。</p>
-    <p class="sublead">SWIFT-TEC予報、IRI電子密度、飛行経路の研究解析、NOAA現況、観測・的中率検証を一か所に整理。</p>
-    <div class="disclaimer"><strong>公開研究用・非運用システム。</strong> VTEC予報、IRI気候モデル、空間補間、感度実験、観測値、現況指数は異なる種類の情報です。実際の航空・通信・防衛運用の意思決定には利用しないでください。非公開の飛行経路や通信設定を入力・公開しないでください。</div>
-  </div></header>
-  <main class="wrap" id="main">
-    <div class="quicknav"><strong>機能カテゴリから探す</strong><nav class="jump" aria-label="機能カテゴリ"><a href="#global">全球可視化・予報</a><a href="#aviation">航空・宇宙天気</a><a href="#verification">観測・精度検証</a><a href="#demo">研究用デモ</a></nav></div>
-
-    <section id="global" aria-labelledby="global-title">
-      <div class="section-head"><h2 id="global-title">全球可視化・予報</h2><p>時間変化・高度分布・VTECを地図で確認</p></div>
-      <div class="grid">
-        <a class="tile" href="./animate.html"><div class="headrow"><span class="tile-icon" aria-hidden="true">▶</span><div><h3>30分ヒートマップ動画</h3><span class="tag">VTEC FORECAST ANIMATION</span></div></div><p>全球のVTECを30分刻みで再生。時間スライダー、再生速度変更、時刻差分を表示。</p><span class="go">アニメーションを開く →</span></a>
-        <a class="tile" href="./ionosphere.html"><div class="headrow"><span class="tile-icon" aria-hidden="true">≋</span><div><h3>全球IRI / TECモデル</h3><span class="tag">IONOSPHERE MODEL</span></div></div><p>NmF2、hmF2、foF2やTEC感度実験を表示。IRI実計算地点と補間地点を区別。</p><span class="go">全球モデルを開く →</span></a>
-        <a class="tile" href="./explorer.html"><div class="headrow"><span class="tile-icon" aria-hidden="true">◉</span><div><h3>GAIA型・3D電離圏エクスプローラ</h3><span class="tag">IRI × ISEE JAPAN • 3D / VERTICAL SECTION</span></div></div><p>日本のISEE観測VTECと同時刻のIRI電子密度。全国各地の垂直断面・高度スライス・公開経路の断面を切り替え。</p><span class="go">3D Explorerを開く →</span></a>
-        <a class="tile" href="./globe.html"><div class="headrow"><span class="tile-icon" aria-hidden="true">◎</span><div><h3>3D電子密度地球儀</h3><span class="tag">3D IRI DENSITY</span></div></div><p>地球上の電子密度分布を高度・時刻ごとに探索。モデル・補間に基づく研究表示。</p><span class="go">3D地球儀を開く →</span></a>
-        <a class="tile" href="./tec.html"><div class="headrow"><span class="tile-icon" aria-hidden="true">▦</span><div><h3>従来型VTECマップ</h3><span class="tag">LEGACY VTEC VIEW</span></div></div><p>SWIFT-TEC由来のVTEC予報を従来の2D地図画面で確認。</p><span class="go">VTECマップを開く →</span></a>
-      </div>
-    </section>
-
-    <section id="aviation" aria-labelledby="aviation-title">
-      <div class="section-head"><h2 id="aviation-title">航空・宇宙天気</h2><p>公開・架空の経路と宇宙天気情報を可視化</p></div>
-      <div class="grid">
-        <a class="tile" href="./impact.html"><div class="headrow"><span class="tile-icon" aria-hidden="true">✈</span><div><h3>飛行経路への影響解析</h3><span class="tag">AVIATION &amp; PNT STUDY</span></div></div><p>飛行位置・通過時刻に沿ってTECを参照し、GNSS L1の一次電離圏群遅延を概算。</p><span class="go">経路解析を開く →</span></a>
-        <a class="tile" href="./ops.html"><div class="headrow"><span class="tile-icon" aria-hidden="true">◉</span><div><h3>宇宙天気状況把握</h3><span class="tag">SPACE WEATHER MONITOR</span></div></div><p>NOAAのG/S/Rスケールと、HF・PNT・衛星通信等に関する公開情報・モデルの制約を確認。</p><span class="go">状況把握画面を開く →</span></a>
-      </div>
-    </section>
-
-    <section id="verification" aria-labelledby="verification-title">
-      <div class="section-head"><h2 id="verification-title">観測・精度検証</h2><p>基準モデルの誤差と長期的中率を追跡</p></div>
-      <div class="grid">
-        <a class="tile" href="./year.html"><div class="headrow"><span class="tile-icon" aria-hidden="true">▤</span><div><h3>365日間の的中率</h3><span class="tag">ROLLING YEAR HISTORY</span></div></div><p>IRI基準推定のfoF2・hmF2について、日別・月別・リードタイム別の的中率とMAE等を表示。</p><span class="go">年間的中率を開く →</span></a>
-        <a class="tile" href="./skill.html"><div class="headrow"><span class="tile-icon" aria-hidden="true">⌁</span><div><h3>事前予測の事後検証</h3><span class="tag">PROSPECTIVE SKILL</span></div></div><p>発表時刻を記録したIRI基準推定と、後から得られた観測値を照合。</p><span class="go">事後検証を開く →</span></a>
-        <a class="tile" href="./ionosonde.html"><div class="headrow"><span class="tile-icon" aria-hidden="true">⌖</span><div><h3>イオノゾンデ観測比較</h3><span class="tag">GIRO / KC2G OBSERVATIONS</span></div></div><p>観測局のfoF2・hmF2と、観測時刻に計算したIRIモデルを比較。</p><span class="go">観測比較を開く →</span></a>
-        <a class="tile" href="./quality.html"><div class="headrow"><span class="tile-icon" aria-hidden="true">▥</span><div><h3>科学的品質管理</h3><span class="tag">DATA &amp; MODEL QUALITY</span></div></div><p>IRI計算と補間品質、SWIFT-TECとのモデル差分、NOAA GloTEC事後照合を確認。</p><span class="go">品質管理を開く →</span></a>
-      </div>
-    </section>
-
-    <section id="demo" aria-labelledby="demo-title">
-      <div class="section-head"><h2 id="demo-title">研究用デモ</h2><p>合成データを使った表示・計算確認用</p></div>
-      <div class="grid">
-        <a class="tile" href="./map.html"><div class="headrow"><span class="tile-icon" aria-hidden="true">◇</span><div><h3>合成電離圏マップ</h3><span class="tag">SYNTHETIC DEMONSTRATION</span></div></div><p>モデル連携の動作確認に使う合成データの可視化。観測値や実予報ではありません。</p><span class="go">デモマップを開く →</span></a>
-      </div>
-    </section>
-
-    <aside class="note"><span aria-hidden="true">ⓘ</span><div><strong>データの読み方</strong> — 30分ヒートマップはSWIFT-TEC由来のモデル予報、3D表示はIRI気候モデルに基づく表示です。365日間の的中率はIRI基準推定の事後照合であり、SWIFT-TEC補正後の電子密度予報の的中率を意味しません。観測データの利用条件と観測局提供者の出典表示にもご注意ください。</div></aside>
-  </main>
-  <footer><div class="wrap">SWIFT-ION · Independent public-data scientific research prototype · © Data sources and software belong to their respective providers.</div></footer>
-</body>
-</html>
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#071928">
+<title>SWIFT-ION | Space Weather Forecast Studio</title>
+<style>:root{color-scheme:dark;--bg:#071625;--panel:#102a40;--border:#2b5269;--text:#eaf6ff;--muted:#b0c9d8;--teal:#79d9ed}*{box-sizing:border-box}body{margin:0;font:14px/1.6 system-ui,sans-serif;background:var(--bg);color:var(--text)}a{color:inherit;text-decoration:none}header{background:radial-gradient(ellipse at 72% 12%,#1b5473 0,transparent 58%),linear-gradient(120deg,#0f3551,#071625);padding:48px clamp(18px,5vw,75px) 41px;border-bottom:1px solid var(--border)}header h1{font-size:44px;letter-spacing:.035em;margin:0}header em{font-style:normal;color:var(--teal)}header p{color:#c8e0ee;max-width:800px;font-size:16px}main{max-width:1500px;margin:auto;padding:28px clamp(18px,5vw,75px) 65px}h2{font-size:17px;margin:30px 0 14px;color:#a3e3f2;letter-spacing:.02em}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:13px}.card{display:block;border:1px solid var(--border);border-radius:14px;background:linear-gradient(140deg,#123a52,#0b2538);padding:22px;min-height:185px;transition:transform .12s,border-color .12s}.card:hover{transform:translateY(-2px);border-color:#6fdcf5}.card strong{display:block;font-size:19px;margin:10px 0}.card small{color:var(--muted);display:block;font-size:13px}.kicker{font-size:11px;letter-spacing:.13em;font-weight:750;color:#8de3e7}.note{border-left:3px solid #d3a870;background:#262b33;padding:12px 16px;color:#f4d6a5;margin-top:17px;font-size:12px}.secondary{display:flex;gap:12px;flex-wrap:wrap}.secondary a{border:1px solid var(--border);padding:8px 12px;border-radius:8px;background:#0c293d;color:#b4ddec}.foot{font-size:12px;color:#a0bbcb;padding-top:28px} @media(max-width:670px){header h1{font-size:31px}.card{min-height:145px}}</style></head><body>
+<header><div class="kicker">SPACE WEATHER / IONOSPHERE RESEARCH</div><h1>SWIFT <em>ION</em></h1><p>TEC・foF2・hmF2・高度別電子密度を30分刻みで再生。3D多層表示と飛行経路断面も、同じ予報時刻に連動する研究用プラットフォーム。</p><div class="note"><b>研究用の実験的予報。</b> TEC連動電子密度とfoF2はIRI鉛直構造を一様に倍率調整した感度シナリオ。検証済みの性能予報ではありません。ISEE観測VTECとは時刻・物理量を分けています。</div></header>
+<main><h2>30-MINUTE FORECAST / ANIMATION</h2><div class="grid">
+<a class="card" href="./animate_fullscreen.html"><span class="kicker">01 / OBSERVATIONAL INPUT + MODEL FORECAST</span><strong>全球VTEC予報動画</strong><small>SWIFT-TECの全球格子・30分刻み。ヒートマップ／差分／全画面再生。</small></a>
+<a class="card" href="./field.html"><span class="kicker">02 / F2-LAYER FORECAST CINEMA</span><strong>foF2・hmF2 30分予報動画</strong><small>IRI基準とTEC連動foF2シナリオを切替。高度別Neも表示、全画面再生。</small></a>
+<a class="card" href="./route.html"><span class="kicker">03 / ROUTE-TIME MODEL SECTION</span><strong>foF2 飛行経路予報動画</strong><small>公開・架空経路のfoF2、通過時刻モデル、Ne鉛直断面を同時に再生。</small></a>
+<a class="card" href="./explorer.html"><span class="kicker">04 / GAIA-STYLE 3D</span><strong>3D電離圏・多層動画</strong><small>地球地図、E/F1/F2/Topside、Voxel、Isosurface、foF2・hmF2、全画面。</small></a>
+</div><h2>MODEL VALIDATION / SPACE WEATHER</h2><div class="grid">
+<a class="card" href="./year.html"><span class="kicker">YEARLY QUALITY</span><strong>365日間の的中率記録</strong><small>先行発表したIRI基準推定値と観測を照合。日別・月別・予報リードタイム別。</small></a>
+<a class="card" href="./ops.html"><span class="kicker">PUBLIC SITUATION AWARENESS</span><strong>宇宙天気状況把握</strong><small>NOAA現況スケールと公開宇宙環境情報の表示。</small></a>
+</div><h2>SCIENTIFIC DIAGNOSTICS / ARCHIVE</h2><div class="secondary"><a href="./ionosonde.html">イオノゾンデ検証</a><a href="./skill.html">直近予報の照合</a><a href="./quality.html">品質レポート</a><a href="./ionosphere.html">IRI基準モデル</a><a href="./impact.html">従来のTEC経路評価</a></div><div class="foot">SWIFT-TEC上流コードと既存の履歴データは変更していません。合成デモ・旧式の重複ビューはホームの主要メニューから外しました。モデルの科学的妥当性と表示の滑らかさは別です。</div></main></body></html>

@@ -96,6 +96,29 @@ jobs:
           print('Explorer:',d['japan']['status'],'Japan frames=',len(d['japan']['frames']))
           PY
 
+      # Experimental coupling: prospective IRI climatology + SWIFT-TEC 30-minute VTEC.
+      # Does not touch original SWIFT-TEC, NOAA, ISEE, 365-day validation or artifacts.
+      - name: Build 30-minute ionosphere forecast cinema
+        run: |
+          python scripts/build_ion_forecast.py \
+            --animation docs/animation \
+            --ionosphere docs/ionosphere.json \
+            --output docs/ion_forecast.json \
+            --max-sites 14 \
+            --anchor-hours 12
+          python - <<'PYTEST'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('docs/ion_forecast.json').read_text(encoding='utf-8'))
+          assert d['schema']=='swift-ion-iri-tec-forecast-v1'
+          assert d['metadata']['is_validated_forecast'] is False
+          assert d['metadata']['is_observed_3d_density'] is False
+          if d['status'] in ('AVAILABLE','HISTORICAL_REPLAY_ONLY'):
+              assert len(d['frames']) >= 48
+              assert all(x['valid_at'] for x in d['frames'])
+          print('IRI + TEC 30-minute cinema:',d['status'],len(d['frames']),'frames')
+          PYTEST
+
       - name: Validate ionosphere JSON
         run: |
           python - <<'PY'
@@ -199,6 +222,7 @@ jobs:
             docs/space_weather.json
             docs/density_slices.json
             docs/explorer_data.json
+            docs/ion_forecast.json
             docs/animation/index.json
           retention-days: 7
           if-no-files-found: error

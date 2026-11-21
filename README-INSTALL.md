@@ -1,64 +1,39 @@
-# SWIFT-ION v1.5 — GAIA-style Multilayer / Voxel / Isosurface Explorer
+# SWIFT-ION v1.6 — IRI+TEC Forecast Cinema / foF2 Route
 
-## Installation (preserves existing workflow)
+## What this patch adds
 
-1. Back up your current `SWIFT-ION/docs/explorer.html` if desired.
-2. Extract this ZIP directly into the **root** of your existing `SWIFT-ION` repository, overwriting only matching files:
-   - `docs/explorer.html` (new 3D Cesium UI)
-   - `docs/shared/gaia3d.mjs` (math / IDW / marching tetrahedra)
-   - `docs/shared/gaia3d-app.mjs` (Cesium UI/rendering)
-   - `tests/test_gaia3d_js.py` (Python discovery wrapper for JS tests)
-   - `tests/test-gaia3d.mjs` (Node.js numerical tests)
-3. Do **NOT** replace your `.github/workflows/pages.yml`. This patch deliberately includes **no workflow file**.
-4. Commit in GitHub Desktop: `Add GAIA-style multilayer shells, volumetric voxels and IRI isosurfaces`
-5. Push to main and wait for your existing GitHub Pages workflow to finish.
-6. Open: `https://sgsy4c2zh7-tech.github.io/SWIFT-ION/explorer.html`
+- **30-minute forward-time ionosphere scenario** (`scripts/build_ion_forecast.py`): the already-published SWIFT-TEC 30-min VTEC forecast supplies time and column TEC; **future-time IRI-2020** supplies sparse vertical profiles. IRI is calculated at 12-hour anchors (14 global/Japan sites); at the intervening 30-minute valid times, the profiles are **linearly interpolated in time**, not independently recomputed. This is NOT a validated new physical forecast.
+- **Experimental foF2 scenario**: a restricted uniform positive scaling of Ne(h), only for sites where VTEC/IRI 100–2000 km partial TEC ratio is in `[0.5,2.0]` and IRI topside truncation is small. The scenario foF2 is `foF2_IRI * sqrt(scale)`; **hmF2 is never moved by TEC scaling**. Unavailable corrections remain null.
+- **foF2 / hmF2 / Ne cinematic map** (`docs/field.html`), with 30-minute playback, clock and fullscreen.
+- **foF2 flight-route cinema** (`docs/route.html`, `docs/shared/route-forecast.mjs`): public/illustrative geographic paths, distance-vs-foF2 plot, density curtain, per-point UTC. You may choose *same-UTC snapshot* or *hypothetical travel-time passage*; the latter shifts the model sampling time along the path by a user-entered flight duration. Includes fullscreen and 30-min replay. **It is not HF/MUF performance or aircraft navigation guidance.**
+- **3D globe / GAIA multi-layer video** (`docs/explorer.html`, `docs/shared/gaia3d-app.mjs`): future foF2, hmF2, Ne shells, voxel, isosurface, vertical section all share the 30-minute timeline. OpenStreetMap / Esri World Imagery / grid basemap. Extra playback controls remain available in fullscreen.
+- **Original SWIFT-TEC VTEC animation fullscreen wrapper** (`docs/animate_fullscreen.html`): opens the existing `docs/animate.html` without modifying its NOAA fetching or animation engine.
+- **Simplified homepage** (`docs/index.html`): four core forecast views prominent, old duplicate demo pages omitted from main cards, verification and yearly history still linked and unchanged.
+- **Original workflow preserved**, plus only one downstream forecast export step and one diagnostics artifact (`.github/workflows/pages.yml`).
 
-## Required existing pipeline
+## Install with GitHub Desktop
 
-The published `docs/explorer_data.json` from SWIFT-ION v1.4 is required.
-- schema `swift-ion-explorer-v1.4`
-- `global_frames[].sites[]` with `lat`, `lon`, `ne_log10_m3[]`
-- `japan.frames[].iri_sites[]` computed at the exact ISEE observation UTC
-- `japan.frames[].vtec` for **separately shown** observed-type ISEE VTEC [TECU]
-- `metadata.altitudes_km[]` (representative altitudes 100–1000 km)
+1. Extract this ZIP.
+2. Copy `.github`, `docs`, `scripts`, `tests` into the root of the **SWIFT-ION** repository (not SWIFT-TEC). Overwrite matching files.
+3. Commit summary: `Add 30-minute foF2 route forecast cinema and synchronized 3D playback`.
+4. Push main, then inspect Actions step `Build 30-minute ionosphere forecast cinema`. The existing `Calculate SWIFT-TEC...`, `Build GAIA-style...`, `Record prospective...`, `Commit 365-day history` steps remain.
+5. Once Pages deployment succeeds, use:
+   - `/` central dashboard
+   - `/animate_fullscreen.html` VTEC original player with fullscreen
+   - `/field.html` foF2 / hmF2 / Ne 30-min playback
+   - `/route.html` foF2 flight-route playback and Ne curtain
+   - `/explorer.html` 3D layered globe + foF2/ hmF2 animation
+   - `/year.html` original 365-day skill history
 
-NOAA scripts, upstream SWIFT-TEC, 365-day history and ISEE/IRI generator are **not modified**.
+## Boundaries, provenance and status
 
-## Features
-
-- **Single-height:** a semi-transparent, continuous IRI electron-density texture on a Cesium rectangle at a chosen height, with fixed color scale `log10 Ne = 8.0–12.8 m^-3`.
-- **Four shells:** checkable E (~125 km), F1 (~190 km), F2 (~300 km), topside (~650 km) representative height slices. Shared time and fixed legend, individual checkbox + individual opacity sliders + global opacity.
-- **Route curtain:** view the same selected IRI model time along a public/illustrative route. Great-circle route sampling, IDW interpolation; altitude-vs-distance section chart and 3D translucent curtain.
-- **Voxel preview:** up to ~900 coarse 3D box geometry instances filtered by the chosen electron density threshold. This is an IRI interpolation visualization, not measured 3D tomography.
-- **Isosurface:** marching tetrahedra on a reduced lat/lon/alt grid. Draw a mesh for selected `log10 Ne` threshold. This is true geometry extraction from a *model-interpolated field*, not a new assimilative physical product.
-- **Japan:** existing v1.4 ISEE VTEC readout, source age, and same-UTC IRI comparison retained. City selection includes locations across Japan.
-
-## Scientific cautions
-
-- IRI-2020 **climatology** provides electron-density height profiles, not a verified forecast.
-- ISEE archived VTEC is a vertically integrated quantity; it is **not** 3D observed electron density. ISEE/VTEC and IRI/Ne are kept separate.
-- Smooth colors, interpolation, and isosurfaces do not add information beyond the sparse IRI sample sites. Near boundaries and over gaps, spatial uncertainty can be large.
-- F1 may not be a distinct physical peak at all times; shell labels are approximate altitude bands.
-- Not for operational aviation, GNSS, HF, military or safety decisions.
-- Cesium 3D and OpenStreetMap imagery require an internet-connected browser supporting WebGL.
+- This does **not** rewrite SWIFT-TEC, NOAA, ISEE source, the KC2G comparison, or the `swift-ion-history` branch.
+- ISEE Japan VTEC is an archived observation product, not a Ne(h) measurement or a future ISEE forecast. The historical Japan mode remains separate from the future IRI+TEC mode.
+- `docs/ion_forecast.json` is always explicitly marked **unvalidated**. If the IRI model cannot load, the export writes an `IRI_UNAVAILABLE` status instead of fake numbers; the old Pages workflow should still continue.
+- All model pages use sparse IRI spatial interpolation. foF2 from IRI NmF2 is a proxy, while hmF2 is a height-grid peak; the actual temporal dynamics, uncertainty and independent future skill are **not proven**.
+- Old accuracy history remains for the separately issued IRI baseline, **not** automatically for these new TEC-linked scenario outputs. No historical accuracy is asserted for v1.6.
+- Public illustrative routes only. Do not upload or embed private flight paths, operational frequencies, system weaknesses or mission data in public GitHub Pages.
 
 ## Tests
 
-```bash
-node --test tests/test-gaia3d.mjs
-python -m unittest discover -s tests -p 'test_gaia3d_js.py' -v
-```
-
-The numerical tests exercise altitude interpolation, nearest site, source clipping, palette transparency, great-circle routes, and marching-tetrahedra isosurface generation. They do not certify the full Cesium visual outcome in a deployed browser. The existing workflow's Python test discovery automatically runs the `test_gaia3d_js.py` wrapper if Node.js is installed (GitHub Ubuntu hosted runners include Node.js).
-
-## If the display fails
-
-1. Open the `explorer.html` page and inspect its blue status panel.
-2. Check that `explorer_data.json` is available (GitHub Actions `Build GAIA-style IRI and ISEE Japan explorer` stage).
-3. Check browser developer console for Cesium/CDN/WebGL problems. Try **Single Height** and **Lightweight** resolution first.
-4. If there are no ISEE/IRI regional frames, Japan mode is unavailable and the interface falls back to Global IRI without inventing observed data.
-
-### Restore previous version
-
-Replace just `docs/explorer.html` with your previous version and remove `docs/shared/gaia3d.mjs` and `docs/shared/gaia3d-app.mjs` if no longer needed. The scientific data generation and workflow remain untouched.
+Run `python -m unittest discover -s tests -v` (new Python 6 tests, including a Node-executed JS interpolation/route test), or `node tests/test-route-forecast.mjs`. Browser CesiumJS and Leaflet still require Internet; deployment/rendering must be checked on the published Pages site.
