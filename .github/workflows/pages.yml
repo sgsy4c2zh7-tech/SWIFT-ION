@@ -15,6 +15,7 @@ concurrency:
 jobs:
   test-and-publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -23,16 +24,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m unittest discover -s tests -v
-      - run: python scripts/build_demo.py
-      - run: python scripts/build_map.py
-      - name: Import public SWIFT-TEC forecast if URL is configured
-        env:
-          SWIFT_TEC_CSV_URL: ${{ vars.SWIFT_TEC_CSV_URL }}
-        run: python scripts/sync_tec.py
-      - name: Import locally committed CSV if available and no automatic feed is configured
-        if: ${{ vars.SWIFT_TEC_CSV_URL == '' }}
-        run: python scripts/import_swift_tec_csv.py
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+      - name: Build synthetic demos
+        run: |
+          python scripts/build_demo.py
+          python scripts/build_map.py
+      - name: Install browser automation
+        run: |
+          python -m pip install playwright==1.56.0
+          python -m playwright install --with-deps chromium
+      - name: Read upstream SWIFT-TEC (without modifying it)
+        run: git clone --depth 1 https://github.com/sgsy4c2zh7-tech/tec_tool_globalgrid_f107_copy.git _upstream_swifttec
+      - name: Calculate and publish SWIFT-TEC VTEC forecast
+        run: python scripts/build_live_swifttec.py
       - uses: actions/configure-pages@v5
         with:
           enablement: true
