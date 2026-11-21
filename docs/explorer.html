@@ -39,6 +39,10 @@ button{cursor:pointer;color:var(--fg);border:1px solid #47718a;background:#193b5
 #iseeMap{width:100%;height:190px;background:#091b2c;border:1px solid #30506a;border-radius:9px}
 .strong{color:var(--gold);font-weight:650}.pill{font-size:10px;background:#153c58;padding:3px 7px;border:1px solid #36718e;border-radius:15px}
 .checkline{display:flex;align-items:center;gap:8px;color:#cbdfee;font-size:11px}
+.camera-modes button{font-size:11px;padding:7px 5px;min-width:0;flex:1}
+.camera-modes .active-scene{background:#137e99;border-color:#6bd9ef;box-shadow:0 0 0 1px #6bd9ef7a}
+#cameraPitch,#cameraHeading,#cameraRange{width:100%}
+#cameraStatus{line-height:1.6}
 .footer{margin-top:14px;color:#a9c5d5;font-size:11px}
 #seek{width:100%;accent-color:#69d9ee}
 .workspace:fullscreen{display:flex;flex-direction:column;overflow:auto;width:100vw;height:100vh;padding:10px;background:#061522}
@@ -66,6 +70,12 @@ button{cursor:pointer;color:var(--fg);border:1px solid #47718a;background:#193b5
 <hr>
 <h2>EARTH MAP / FULLSCREEN</h2>
 <div class="field"><label for="basemap">球体に貼る地図</label><select id="basemap"><option value="osm">OpenStreetMap 地図</option><option value="satellite">衛星画像（Esri World Imagery）</option><option value="grid">緯度経度グリッド（オフライン可）</option></select></div>
+<div class="field"><label>地球表示モード（Cesium）</label><div class="compact-row camera-modes" role="group" aria-label="地球儀の表示モード"><button id="scene3d" class="active-scene" type="button">🌐 3D球体</button><button id="scene2d" type="button">▤ 2D平面</button><button id="scene25d" type="button">◩ 2.5D斜め</button></div></div>
+<div class="field"><label>横から見るカメラ</label><div class="compact-row"><button id="sidePreset" type="button">↔ 横から見る</button><button id="topPreset" type="button">↓ 真上から</button></div></div>
+<div class="field"><label for="cameraPitch">傾斜（-90° 真上 / 0° 水平） <b id="cameraPitchValue">-12°</b></label><input id="cameraPitch" type="range" min="-90" max="-1" value="-12" step="1"></div>
+<div class="field"><label for="cameraHeading">方位角 <b id="cameraHeadingValue">85°</b></label><input id="cameraHeading" type="range" min="0" max="360" value="85" step="5"></div>
+<div class="field"><label for="cameraRange">視点距離 <b id="cameraRangeValue">2200 km</b></label><input id="cameraRange" type="range" min="300" max="15000" value="2200" step="100"></div>
+<p class="note" id="cameraStatus">2Dでは傾斜は固定。横からのシェル観察には3Dに切り替えてください。</p>
 <button id="fullscreen" style="width:100%">⛶ 3D画面＋断面を全画面表示</button>
 <p class="note">標準地図・衛星画像のタイル読込にはネット接続が必要です。地図は地球表面、電子密度シェルは上空に描画します。</p>
 <hr><h2>VISUAL APPEARANCE</h2>

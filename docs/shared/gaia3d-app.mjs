@@ -10,7 +10,7 @@ const ROUTES={
 };
 const q={data:null,forecast:null,source:'global',modelVariant:'iri',frame:0,mode:'multi',alt:300,palette:'turbo',opacity:.62,viewer:null,
   ownEntities:[],ownPrimitives:[],timer:null,route:ROUTES['tokyo-naha'],routePoints:[],selected:[35.68,139.76],lastSurfaceN:0,
-  lastMode:null,rendering:false,revision:0,resizeTimer:null,weightCache:new Map()};
+  lastMode:null,rendering:false,revision:0,resizeTimer:null,weightCache:new Map(),pendingPose:false};
 const BOUNDS={japan:{west:122,south:24,north:46,east:150},global:{west:-178,south:-75,north:75,east:178}};
 const DATE_FORMAT=new Intl.DateTimeFormat('ja-JP',{timeZone:'UTC',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
 const fmt=(n,d=1)=>valid(n)?n.toLocaleString('ja-JP',{maximumFractionDigits:d}):'—';
@@ -70,6 +70,11 @@ function createViewer(){
  q.viewer.scene.globe.enableLighting=false;
  q.viewer.scene.globe.depthTestAgainstTerrain=false;
  q.viewer.camera.setView({destination:Cesium.Cartesian3.fromDegrees(138,29,4300000)});
+ q.viewer.scene.morphComplete.addEventListener(()=>{
+  setProjectionControls();
+  if(q.pendingPose){q.pendingPose=false;applyCameraPose()}
+  q.viewer.resize();q.viewer.scene.requestRender();
+ });
  const handler=new Cesium.ScreenSpaceEventHandler(q.viewer.canvas);
  handler.setInputAction(e=>{
    const ray=q.viewer.camera.getPickRay(e.position),p=ray&&q.viewer.scene.globe.pick(ray,q.viewer.scene);
@@ -82,7 +87,59 @@ function createViewer(){
 function cameraToData(){
  if(!q.viewer)return;
  const d=sourceClass()==='japan'?{lon:136,lat:35,height:2500000}:{lon:10,lat:10,height:14500000};
+ q.viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
  q.viewer.camera.flyTo({destination:Cesium.Cartesian3.fromDegrees(d.lon,d.lat,d.height),duration:1.2});
+}
+function setProjectionControls(){
+ if(!q.viewer)return;
+ const m=q.viewer.scene.mode;
+ const ids={scene3d:Cesium.SceneMode.SCENE3D,scene2d:Cesium.SceneMode.SCENE2D,scene25d:Cesium.SceneMode.COLUMBUS_VIEW};
+ for(const [id,mode] of Object.entries(ids))$(id)?.classList.toggle('active-scene',m===mode);
+ const flat=m===Cesium.SceneMode.SCENE2D;
+ for(const id of ['cameraPitch','cameraHeading','cameraRange'])if($(id))$(id).disabled=flat;
+ if(flat)$('cameraStatus').textContent='2D平面表示中：地図のズーム・ドラッグができます。横から見るには3Dへ切替。';
+ else if(m===Cesium.SceneMode.COLUMBUS_VIEW)$('cameraStatus').textContent='2.5D斜め表示中。横からシェルを見るには「横から見る」を選択。';
+}
+function projection(mode){
+ if(!q.viewer)return;
+ const sc=q.viewer.scene;
+ q.pendingPose=false;
+ try{
+  q.viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+  if(mode==='2d')sc.morphTo2D(.8);
+  else if(mode==='25d')sc.morphToColumbusView(.8);
+  else sc.morphTo3D(.8);
+  $('cameraStatus').textContent='投影法を切替中…';
+ }catch(e){$('cameraStatus').textContent='投影法の切替に失敗: '+e.message}
+}
+function applyCameraPose(){
+ if(!q.viewer)return;
+ const sc=q.viewer.scene;
+ if(sc.mode!==Cesium.SceneMode.SCENE3D){
+  q.pendingPose=true;
+  q.viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+  if(sc.mode!==Cesium.SceneMode.MORPHING)sc.morphTo3D(.8);
+  $('cameraStatus').textContent='3Dへ切り替えてカメラ角度を適用中…';
+  return;
+ }
+ try{
+  const [lat,lon]=q.selected?.every(valid)?q.selected:[35.68,139.76];
+  const pitch=Number($('cameraPitch').value),heading=Number($('cameraHeading').value),range=Number($('cameraRange').value);
+  const target=Cesium.Cartesian3.fromDegrees(lon,lat,300000);
+  const look=new Cesium.HeadingPitchRange(Cesium.Math.toRadians(heading),Cesium.Math.toRadians(pitch),range*1000);
+  q.viewer.camera.lookAt(target,look);
+  q.viewer.scene.requestRender();setProjectionControls();
+  $('cameraStatus').textContent=`${lat.toFixed(2)}°, ${lon.toFixed(2)}°を基準に視点設定：傾斜 ${pitch}°、方位 ${heading}°、距離 ${range} km。背景地図と層高度の位置関係を確認してください。`;
+ }catch(e){$('cameraStatus').textContent='カメラ視点の設定に失敗: '+e.message}
+}
+function cameraPreset(kind){
+ if(kind==='side'){
+  $('cameraPitch').value='-12';$('cameraHeading').value='85';$('cameraRange').value='2200';
+ }else{
+  $('cameraPitch').value='-89';$('cameraHeading').value='0';$('cameraRange').value='4200';
+ }
+ for(const id of ['cameraPitch','cameraHeading','cameraRange'])$(id).dispatchEvent(new Event('input'));
+ applyCameraPose();
 }
 function cachedGridWeights(w,hh){
  const sitesNow=sites(),b=configBounds();
@@ -387,6 +444,15 @@ function installControls(){
  $('fsExit')?.addEventListener('click',()=>{if(document.fullscreenElement)document.exitFullscreen()});
  $('modelVariant').addEventListener('change',e=>{q.modelVariant=e.target.value;q.weightCache.clear();redraw()});
  $('basemap').addEventListener('change',applyBasemap);
+ $('scene3d').addEventListener('click',()=>projection('3d'));
+ $('scene2d').addEventListener('click',()=>projection('2d'));
+ $('scene25d').addEventListener('click',()=>projection('25d'));
+ $('sidePreset').addEventListener('click',()=>cameraPreset('side'));
+ $('topPreset').addEventListener('click',()=>cameraPreset('top'));
+ for(const [id,label] of [['cameraPitch','cameraPitchValue'],['cameraHeading','cameraHeadingValue'],['cameraRange','cameraRangeValue']]){
+  $(id).addEventListener('input',e=>$(label).textContent=e.target.value+(id==='cameraRange'?' km':'°'));
+  $(id).addEventListener('change',applyCameraPose);
+ }
  $('fullscreen').addEventListener('click',async()=>{
    const target=document.querySelector('.workspace');try{
     if(document.fullscreenElement){await document.exitFullscreen()}else await target.requestFullscreen();
