@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SWIFT-ION | Scientific Quality & Verification</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#081728;color:#e9f2fd;font:14px/1.65 system-ui,sans-serif}
+main{max-width:1230px;margin:0 auto;padding:24px 18px 56px}h1{font-size:28px;margin:0 0 4px}h2{font-size:19px;margin:0 0 12px}h3{font-size:15px;margin:4px 0 8px}.muted{color:#abc4d9}.warn{margin:16px 0 22px;border-left:3px solid #e5b46b;padding:12px 15px;background:#2a2933;border-radius:6px}a{color:#8fd8ff}nav{display:flex;flex-wrap:wrap;gap:16px;margin:12px 0 26px}.card{background:#10253a;border:1px solid #284760;border-radius:13px;padding:17px;margin-bottom:16px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.stat{background:#163047;border-radius:9px;padding:14px}.stat b{font-size:25px;display:block;line-height:1.5}.stat span{font-size:12px;color:#b7cde0}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:11px 9px;border-bottom:1px solid #27435c;text-align:right;font-variant-numeric:tabular-nums;vertical-align:top}th:first-child,td:first-child{text-align:left}th{color:#a4c8e6;font-weight:600}td.note{text-align:left;color:#bed2e1}select{background:#092036;color:white;border:1px solid #4b718c;padding:8px 12px;border-radius:8px}#plot{width:100%;max-height:270px;background:#0a1e30;border-radius:9px}.pill{display:inline-block;background:#28445a;padding:3px 9px;border-radius:999px;font-size:12px}.caption{font-size:12px;color:#a4bdcf}details{margin-top:12px}summary{cursor:pointer}#error{color:#ffb8ab}code{color:#bbdbff;overflow-wrap:anywhere}.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}}@media(max-width:550px){.grid{grid-template-columns:1fr 1fr}table{font-size:11px}th,td{padding:8px 4px}}
+</style>
+</head>
+<body><main>
+<h1>SWIFT-ION <span style="color:#72c7fa">Science Quality v0.8</span></h1>
+<p class="muted">IRIの計算・補間の品質、TEC差分、NOAA GloTECとの時刻一致による事後照合。</p>
+<nav><a href="./ionosphere.html">IRI / TEC 全球マップ</a><a href="./tec.html">SWIFT-TEC 予報</a><a href="./index.html">メインページ</a><a href="./quality.json">品質JSON（公開API）</a></nav>
+<div class="warn"><b>数値の意味を区別しています。</b> IRIの100〜2,000 km積分TECとSWIFT-TECのVTECの差は、観測に対する誤差ではありません。またGloTECは観測を取り込む推定プロダクトであり、独立した真値ではありません。TEC一様スケーリングも電子密度の検証済み予報ではありません。</div>
+<p id="error" role="alert"></p>
+<section class="card"><h2>データ生成状況</h2><div class="grid" id="summary"><div class="stat"><b>—</b><span>読み込み中</span></div></div><div id="sources" class="caption" style="margin-top:15px"></div></section>
+<div class="two"><section class="card"><h2>IRIとSWIFT-TECのモデル差分</h2><div class="caption">折れ線は予報対象時刻ごとの、モデル間TEC差の中央値（符号付き）。縦軸はTECU。<b>予報精度ではありません。</b></div><svg id="plot" viewBox="0 0 640 270" aria-label="IRI vs SWIFT-TEC model discrepancy" role="img"></svg><div class="caption" id="plotdesc"></div></section><section class="card"><h2>モデル計算の品質</h2><label for="selected">表示する時刻：</label> <select id="selected"></select><div id="detail" style="margin-top:13px"></div></section></div>
+<section class="card"><h2>NOAA GloTEC 事後照合</h2><p class="muted">予報発表時刻より後に当たる予報対象時刻だけを、同じUTC時刻・緯度・経度のGloTEC格子と比較する。格子が一致しない場合は補間せず未評価にする。</p><div id="refMeta" class="caption" style="margin-bottom:10px"></div><div style="overflow-x:auto"><table><thead><tr><th>予報対象 UTC</th><th>結果</th><th>一致格子</th><th>MAE [TECU]</th><th>RMSE [TECU]</th><th>Bias [TECU]</th></tr></thead><tbody id="observed"></tbody></table></div><div class="caption" style="margin-top:13px">未到達時刻は「pending」、発表以前の時刻は「ineligible」、参照データがない場合は「unavailable」と表示。欠損を精度0として集計しません。</div></section>
+<details class="card"><summary>出典と制約を表示</summary><pre id="meta" style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px"></pre></details>
+</main>
+<script>
+'use strict';const $=s=>document.getElementById(s);let report=null;
+const fmt=(v,d=2)=>typeof v==='number'&&Number.isFinite(v)?v.toLocaleString('ja-JP',{maximumFractionDigits:d}):'—';
+const svg=(tag,attrs,text)=>{let n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);if(text!=null)n.textContent=text;return n};
+const card=(v,label)=>`<div class="stat"><b>${v}</b><span>${label}</span></div>`;
+function modelChart(rows){let root=$('plot');while(root.firstChild)root.removeChild(root.firstChild);const arr=rows.map(x=>({t:x.valid_at,y:x.model_discrepancy?.median_signed_difference_tecu})).filter(x=>Number.isFinite(x.y));if(!arr.length){$('plotdesc').textContent='モデル比較の値がないためグラフを表示できません。';return}
+ const L=58,R=615,T=22,B=226,low=Math.min(0,...arr.map(x=>x.y)),high=Math.max(0,...arr.map(x=>x.y)),pad=Math.max(1,(high-low)*.1),lo=low-pad,hi=high+pad,px=i=>L+(R-L)*i/Math.max(1,arr.length-1),py=y=>B-(y-lo)/(hi-lo)*(B-T);
+ for(let i=0;i<=4;i++){const y=T+(B-T)*i/4;root.append(svg('line',{x1:L,y1:y,x2:R,y2:y,stroke:'#35516a','stroke-width':1}));root.append(svg('text',{x:L-7,y:y+4,fill:'#abc2d6','font-size':12,'text-anchor':'end'},fmt(hi-(hi-lo)*i/4,1)))}
+ root.append(svg('line',{x1:L,y1:py(0),x2:R,y2:py(0),stroke:'#9cbbc8','stroke-dasharray':'5 5'}));
+ const pts=arr.map((x,i)=>`${px(i)},${py(x.y)}`).join(' ');root.append(svg('polyline',{points:pts,fill:'none',stroke:'#7bd7ff','stroke-width':3}));
+ for(let i=0;i<arr.length;i++){root.append(svg('circle',{cx:px(i),cy:py(arr[i].y),r:5,fill:'#e3ba76'}));let hh=arr[i].t.slice(5,16).replace('T',' ');root.append(svg('text',{x:px(i),y:249,fill:'#bcd3e5','font-size':11,'text-anchor':'middle'},hh))}
+ $('plotdesc').textContent='モデル差 = SWIFT-TEC VTEC − IRI 100〜2000 km部分TEC';
+}
+function renderDetail(){const x=report.iri_model_diagnostics[Number($('selected').value)];if(!x)return;const q=x.quality,d=x.model_discrepancy;$('detail').innerHTML=`<p>IRI実計算 <b>${fmt(q.iri_computations,0)}地点</b> / 全球描画 <b>${fmt(q.display_cells,0)}格子</b></p><p>補間格子 ${fmt(q.methods?.SPATIAL_INTERPOLATION||0,0)} / IRI直接計算格子 ${fmt(q.methods?.IRI_RUN||0,0)}</p><p>IRI最寄り地点までの距離 中央値 <b>${fmt(q.interpolation_distance_km_median)} km</b>・最大 ${fmt(q.interpolation_distance_km_max)} km</p><p>最寄りIRIが1,500 km超の格子 <b>${fmt(q.interpolated_more_than_1500km,0)}</b></p><p>TEC感度実験の適用可能な地点 <b>${fmt(q.scenario_eligible_sites,0)}</b></p><p>F2帯の境界ピーク検出 ${fmt(q.boundary_peaks,0)}地点</p><hr style="border:0;border-top:1px solid #35516a"><p>モデル差（中央値） <b>${fmt(d.median_signed_difference_tecu)} TECU</b></p><p>モデル差の絶対値（中央値） <b>${fmt(d.median_absolute_difference_tecu)} TECU</b></p><p class="caption">異なる高度範囲のTECを比較した診断値であり、予報の誤差ではありません。</p>`}
+function render(data){report=data;const frames=data.iri_model_diagnostics||[],r=data.retrospective_noaa_glotec||{};const complete=r.evaluated_frames||0;const first=frames[0]?.quality||{};$('summary').innerHTML=card(frames.length,'IRI比較時刻数')+card(fmt(first.iri_computations,0),'IRI地点数（先頭時刻）')+card(fmt(first.display_cells,0),'描画格子数（先頭時刻）')+card(complete,'GloTEC事後照合済み時刻数');
+ const m=data.metadata||{};$('sources').textContent=`生成UTC: ${m.generated_at||'—'} ／ SWIFT-TEC計算UTC: ${m.tec_generated_at||'—'} ／ IRI計算UTC: ${m.iri_generated_at||'—'} ／ 補正段階: ${m.tec_correction_stage||'未確認'}`;
+ frames.forEach((x,i)=>$('selected').add(new Option(x.valid_at,String(i))));$('selected').onchange=renderDetail;renderDetail();modelChart(frames);
+ $('refMeta').textContent=`照合状態: ${r.status||'—'} | 参照アーカイブ更新: ${r.archive_updated_at||'不明'} | 照合済み ${complete}時刻`;
+ const body=$('observed');body.replaceChildren();(r.frames||[]).forEach(f=>{const tr=document.createElement('tr');let vals=[f.valid_at,f.status||'—',f.matched_cells??'—',fmt(f.mae_tecu),fmt(f.rmse_tecu),fmt(f.bias_tecu)];for(let i=0;i<vals.length;i++){const td=document.createElement('td');td.textContent=String(vals[i]);if(i===1&&f.reason)td.title=f.reason;tr.append(td)}body.append(tr)});if(!body.children.length){const row=body.insertRow();const td=row.insertCell();td.colSpan=6;td.style.textAlign='left';td.textContent=r.reason||'比較できる時刻はまだありません。'}
+ $('meta').textContent=JSON.stringify({metadata:m,reference:{source:r.source,role:r.role,comparison:r.comparison},notes:'This page is a public research/quality dashboard, not an operational forecast.'},null,2);
+}
+fetch('./quality.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error(`quality.json missing (HTTP ${r.status})`);return r.json()}).then(render).catch(e=>{$('error').textContent='品質レポートを読み込めません: '+e.message+'。ActionsのBuild quality reportステップを確認してください。'});
+</script></body></html>

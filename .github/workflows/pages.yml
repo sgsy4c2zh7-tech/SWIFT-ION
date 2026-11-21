@@ -23,76 +23,103 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-
     steps:
       - name: Checkout SWIFT-ION
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
-
       - name: Build synthetic demos
         run: |
           python scripts/build_demo.py
           python scripts/build_map.py
-
       - name: Install browser automation
         run: |
           python -m pip install playwright==1.56.0
           python -m playwright install --with-deps chromium
-
       - name: Read upstream SWIFT-TEC (read-only)
         run: |
           git clone --depth 1 \
             https://github.com/sgsy4c2zh7-tech/tec_tool_globalgrid_f107_copy.git \
             _upstream_swifttec
-
       - name: Calculate SWIFT-TEC VTEC forecast
         run: python scripts/build_live_swifttec.py
-
       - name: Install IRI runtime dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gfortran cmake make
           python -m pip install --upgrade pip
-          python -m pip install iri2020
-
+          python -m pip install "git+https://github.com/space-physics/iri2020.git"
+          python -c "from iri2020 import IRI; print('IRI2020 import OK')"
       - name: Calculate global IRI samples and TEC sensitivity scenarios
-        run: python scripts/build_ionosphere.py --max-cells 72 --max-frames 3
-
+        run: |
+          python scripts/build_ionosphere.py \
+            --max-cells 80 \
+            --max-frames 5
       - name: Validate ionosphere JSON
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
-          p = Path('docs/ionosphere.json')
-          assert p.exists(), 'IRI output missing: docs/ionosphere.json'
-          d = json.loads(p.read_text(encoding='utf-8'))
-          assert len(d['frames']) == 3, 'Expected three UTC frames'
+          p=Path('docs/ionosphere.json')
+          assert p.exists(), 'IRI JSON missing'
+          d=json.loads(p.read_text(encoding='utf-8'))
+          assert len(d['frames']) == 5, 'Expected 5 UTC frames'
           for f in d['frames']:
-              assert len(f['cells']) >= 54, 'Insufficient IRI model calculations'
-              assert len(f['map_cells']) >= 600, 'Incomplete mapped global grid'
+              assert len(f['cells']) >= 60, 'Insufficient real IRI computations'
+              assert len(f['map_cells']) >= 600, 'Incomplete global grid'
               assert f['stats']['iri_computations'] == len(f['cells'])
-              assert all(c['method'] in ('IRI_RUN', 'SPATIAL_INTERPOLATION') for c in f['map_cells'])
-          assert d['metadata']['is_forecast'] is False, 'Model estimates must not be advertised as validated forecast'
-          print('IRI v0.7: 3 frames, global map and provenance validated')
+              assert all(c['method'] in ('IRI_RUN','SPATIAL_INTERPOLATION') for c in f['map_cells'])
+          assert d['metadata']['is_forecast'] is False
+          print('IRI v0.8 validation passed: 5 UTC frames')
           PY
-
+      - name: Build science quality and retrospective reference report
+        run: |
+          python scripts/build_quality_report.py \
+            --ionosphere docs/ionosphere.json \
+            --forecast docs/swift_tec_vtec.json \
+            --archive _upstream_swifttec/docs/data/tec \
+            --out docs/quality.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          x=json.loads(Path('docs/quality.json').read_text(encoding='utf-8'))
+          assert len(x['iri_model_diagnostics']) == 5
+          print('Quality report OK:', x['retrospective_noaa_glotec']['status'])
+          PY
+      - name: Decide whether to keep a history snapshot
+        id: snapshot
+        shell: bash
+        run: |
+          # Keep push/manual runs and periodic scheduled runs (roughly every 6 h).
+          # Avoid filling the Actions artifact quota with 48 full snapshots per day.
+          hour=$(date -u +%H)
+          if [[ "$GITHUB_EVENT_NAME" != "schedule" ]] || (( 10#$hour % 6 == 0 )); then
+            echo "keep=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "keep=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Save run outputs (7-day snapshot)
+        if: steps.snapshot.outputs.keep == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: swift-ion-results-${{ github.run_id }}
+          path: |
+            docs/swift_tec_vtec.json
+            docs/ionosphere.json
+            docs/quality.json
+          retention-days: 7
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
         with:
           enablement: true
-
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs
-
       - name: Deploy GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
