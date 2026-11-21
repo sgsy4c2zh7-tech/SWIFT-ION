@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071522">
+<title>SWIFT-ION | GAIA-style Ionosphere Explorer</title>
+<style>
+:root{color-scheme:dark;--bg:#061321;--panel:#0a2134;--line:#24485d;--muted:#a9c8d8;--fg:#e6f2fb;--teal:#58d8e9;--gold:#ffcc73}
+*{box-sizing:border-box}body{margin:0;color:var(--fg);font:13px/1.55 system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg)}
+header{display:flex;gap:14px;align-items:center;justify-content:space-between;padding:13px 21px;background:#0b2236;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font-size:19px;letter-spacing:.04em;margin:0}header h1 em{font-style:normal;color:var(--teal)}
+a{color:#8cdcff}.back{color:var(--muted);text-decoration:none}.back:hover{color:white}
+.sup{font-size:10px;letter-spacing:.12em;color:#79b9d3;text-transform:uppercase}
+.app{display:grid;grid-template-columns:290px minmax(0,1fr) 292px;min-height:calc(100vh - 58px)}
+.sidebar,.inspector{background:#0b2032;padding:17px;border-right:1px solid var(--line);overflow:auto}
+.inspector{border-right:0;border-left:1px solid var(--line)}h2{font-size:15px;margin:0 0 10px}h3{font-size:13px;margin:17px 0 7px;color:#c4ecff}
+.note{font-size:11px;color:var(--muted);line-height:1.6}.caution{margin:12px 0;padding:9px 12px;border:1px solid #765c32;background:#292b31;border-radius:8px;color:#f9d59c;font-size:12px}
+.field{margin:12px 0}.field label{display:block;color:#a6c6d8;font-size:11px;margin-bottom:5px}.field small{font-size:10px;color:#8fb4c7}
+input,select,textarea{width:100%;color:var(--fg);background:#0d2b41;border:1px solid #365b70;border-radius:7px;padding:9px 10px;font:inherit}
+input[type=range]{accent-color:var(--teal);padding:2px 0}textarea{resize:vertical;font:12px/1.55 ui-monospace,Consolas,monospace;min-height:86px}
+button{border:1px solid #4e7894;background:#173c56;color:#e9f7ff;border-radius:7px;padding:9px 12px;cursor:pointer;font:inherit}
+button:hover{background:#245574}button:disabled{opacity:.4;cursor:default}.primary{background:#167b92;border-color:#2cb1c2}
+.pair{display:flex;gap:8px;align-items:center}.pair>*{flex:1;min-width:0}.paired-inputs{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.btnrow{display:flex;flex-wrap:wrap;gap:7px}.btnrow button{flex:1}.chip{font-size:10px;padding:3px 7px;background:#203c50;color:#c7e3f2;border-radius:30px;border:1px solid #36566a}
+.stage{min-width:0;padding:15px;background:radial-gradient(ellipse at 52% 30%,#103550 0%,#061420 75%)}
+.stagehead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:11px;flex-wrap:wrap}
+.stagehead b{font-size:15px}.stagehead span{font-size:11px;color:var(--muted)}.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs button{padding:8px 11px;background:#102a3e}.tabs .active{background:#146a82;color:white;border-color:#64c7d8}
+.viz{position:relative;border:1px solid #2b5167;border-radius:12px;overflow:hidden;background:#071729}
+canvas{width:100%;display:block;touch-action:none}#mainCanvas{height:min(61vh,620px);min-height:360px}
+.eyebrow{position:absolute;top:12px;left:14px;font-size:11px;letter-spacing:.1em;color:#bbd9e9;background:#061b2baf;padding:5px 9px;border-radius:4px}
+.legend{position:absolute;bottom:12px;right:13px;background:#081f31e8;border:1px solid #345267;border-radius:9px;padding:9px 11px;min-width:172px;font-size:11px}
+.gradient{height:9px;border-radius:5px;background:linear-gradient(to right,#173d83,#169dc3,#53d8b3,#e7de7f,#fd8e3f,#ec394b);margin:6px 0}
+.plotrow{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.chart{border:1px solid #22485f;border-radius:11px;background:#0b2438;padding:10px;min-width:0}
+.chart h3{margin:0 0 6px;font-size:12px;color:#c1e4f4}.chart canvas{height:170px;border-radius:5px}
+.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.stat{background:#102e43;border:1px solid #285068;padding:10px;border-radius:9px}.stat .value{font-size:19px;font-weight:650}.stat .label{font-size:10px;color:#a9c9d9}
+.kvs{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px;margin-top:9px}.kvs dt{color:var(--muted)}.kvs dd{margin:0;text-align:right;overflow-wrap:anywhere}
+#miniMap{height:160px;border-radius:8px;background:#061726}.status{margin-top:14px;padding:10px;border:1px solid #284760;border-radius:8px;color:#add6e7;white-space:pre-wrap;font-size:12px;overflow-wrap:anywhere}
+.source{color:#ffe0a2;margin:9px 0}.sep{border:0;border-top:1px solid #244459;margin:17px 0}
+.foot{font-size:11px;color:#90b4c6;padding:12px 0}
+@media(max-width:1150px){.app{grid-template-columns:245px minmax(0,1fr)}.inspector{grid-column:1/-1;border-top:1px solid var(--line);border-left:0;display:grid;grid-template-columns:1fr 1fr;gap:15px}.inspector>*{min-width:0}}
+@media(max-width:730px){.app{display:block}.sidebar,.inspector{border-right:0;border-left:0}.inspector{display:block}.plotrow{grid-template-columns:1fr}.stage{padding:8px}#mainCanvas{height:50vh;min-height:320px}header h1{font-size:16px}}
+</style></head><body>
+<header><div><div class="sup">SWIFT-ION / Research platform</div><h1>IONOSPHERE <em>3D EXPLORER</em> <span class="chip">v1.4 • Japan / Global</span></h1></div><a class="back" href="./index.html">← ホームへ</a></header>
+<div class="app">
+<aside class="sidebar">
+  <h2>データと時間</h2>
+  <div class="field"><label for="source">データセット</label><select id="source"><option value="japan">日本 ISEE VTEC + 同時刻IRI</option><option value="global">全球 IRIモデル</option></select></div>
+  <div class="field"><label for="frame">モデル／観測UTC時刻</label><select id="frame"></select></div>
+  <div class="pair"><button id="prev" aria-label="前時刻">◀</button><button class="primary" id="play">▶ 再生</button><button id="next" aria-label="次時刻">▶</button></div>
+  <p class="note" id="timeNote">読み込み中</p>
+  <div class="field"><label for="alt">電子密度を表示する高度 <b id="altLabel">300 km</b></label><input type="range" min="0" max="10" value="4" id="alt"></div>
+  <div class="field"><label for="mode3d">立体表示</label><select id="mode3d"><option value="volume">高度100〜1000 kmの立体点群</option><option value="height">選択高度のみ表示</option></select></div>
+  <div class="field"><label for="tilt">地球儀の傾斜角度</label><input type="range" min="-45" max="70" value="21" step="1" id="tilt"></div>
+  <div class="caution">ISEEは日本周辺のVTEC（TECU）。IRIは高度別Ne（m⁻³）。別の物理量なので、VTECをそのまま3D電子密度とみなしません。</div>
+  <hr class="sep">
+  <h2>日本全国の地点選択</h2>
+  <div class="field"><label for="city">地点プリセット</label><select id="city">
+    <option value="35.68,139.76">東京</option><option value="43.06,141.35">札幌</option><option value="38.27,140.87">仙台</option>
+    <option value="35.18,136.91">名古屋</option><option value="34.70,135.50">大阪</option><option value="34.40,132.46">広島</option>
+    <option value="33.59,130.40">福岡</option><option value="31.60,130.56">鹿児島</option><option value="26.21,127.68">那覇</option>
+  </select></div>
+  <div class="field"><label>任意地点（緯度・経度）</label><div class="paired-inputs"><input type="number" id="pointLat" value="35.68" min="-90" max="90" step="0.01" aria-label="緯度"><input type="number" id="pointLon" value="139.76" min="-180" max="180" step="0.01" aria-label="経度"></div><button id="setPoint" style="margin-top:6px;width:100%">この地点のNe(h)を表示</button></div>
+  <hr class="sep">
+  <h2>任意地点・経路</h2>
+  <div class="field"><label for="preset">経路プリセット（公開・架空の都市間）</label><select id="preset">
+    <option value="tokyo-naha">東京 → 那覇</option>
+    <option value="sapporo-fukuoka">札幌 → 福岡</option>
+    <option value="tokyo-osaka">東京 → 大阪</option>
+    <option value="sendai-nagoya">仙台 → 名古屋</option>
+    <option value="fukuoka-kagoshima">福岡 → 鹿児島</option>
+    <option value="tokyo-sydney">東京 → シドニー</option>
+    <option value="custom">座標入力（2〜12地点）</option>
+  </select></div>
+  <div class="field"><label for="routeText">緯度, 経度（各行1地点）</label><textarea id="routeText">35.68, 139.76
+26.21, 127.68</textarea><small>経路の断面は大圏補間。実航空機の飛行計画ではありません。</small></div>
+  <div class="btnrow"><button class="primary" id="applyRoute">経路を適用</button><button id="resetCamera">表示をリセット</button></div>
+  <div class="field"><label for="planeAlt">参考：航空機高度</label><select id="planeAlt"><option value="10">10 km</option><option value="12">12 km</option><option value="8">8 km</option></select></div>
+  <p class="note">飛行機は主に電離圏の下に位置します。航空機高度を含むプロットは位置関係を示す模式図で、HF通信成立率やGNSS航法可用性の予報ではありません。</p>
+  <div class="status" id="status" role="status">データ読み込み中…</div>
+</aside>
+<main class="stage">
+  <div class="stagehead"><div><b id="viewTitle">3D電子密度</b><div class="sup" id="viewSubtitle">IRI-2020 climatological profiles</div></div><div class="tabs"><button data-view="globe" class="active">3D地球</button><button data-view="section">垂直断面</button><button data-view="slice">高度スライス</button><button data-view="route">経路断面</button></div></div>
+  <div class="viz"><canvas id="mainCanvas" aria-label="電離圏モデル可視化"></canvas><div class="eyebrow" id="canvasHint">ドラッグで地球を回転 • 点をクリックして選択</div><div class="legend"><b id="legendTitle">電子密度 Ne</b><div class="gradient"></div><div id="legendRange">10⁸ → 10¹³ m⁻³</div></div></div>
+  <div class="plotrow"><div class="chart"><h3>選択地点の高度別電子密度 Ne(h)</h3><canvas id="profileCanvas"></canvas></div><div class="chart"><h3 id="tecTitle">経路のVTEC・L1遅延参考値</h3><canvas id="tecCanvas"></canvas></div></div>
+  <div class="foot">全球・日本ともIRI実計算点間の垂直断面は距離重み付き補間。3D点群の高さは視認性のため誇張（模式的な表示）。同じ予報時刻・観測時刻を確認してください。</div>
+</main>
+<aside class="inspector">
+  <section><h2>MODEL STATUS</h2><div class="statgrid"><div class="stat"><div class="value" id="siteCount">—</div><div class="label">IRI実計算地点</div></div><div class="stat"><div class="value" id="tecCount">—</div><div class="label">有効TEC経路地点</div></div><div class="stat"><div class="value" id="peakValue">—</div><div class="label">選択地点 NmF2 [m⁻³]</div></div><div class="stat"><div class="value" id="hValue">—</div><div class="label">選択地点 hmF2 [km]</div></div></div>
+    <h3>出典と時刻</h3><div id="sourceMeta" class="source">—</div><p class="note" id="ageNote">—</p>
+  </section>
+  <section><h3>選択地点</h3><dl class="kvs"><dt>緯度</dt><dd id="selLat">—</dd><dt>経度</dt><dd id="selLon">—</dd><dt>foF2（IRIモデル）</dt><dd id="selFof2">—</dd><dt>IRI計算方法</dt><dd id="selMethod">—</dd></dl><p class="note">地球儀または高度スライスをクリックすると最寄りのIRI実計算地点を選択。</p></section>
+  <section><h3>日本 ISEE VTEC マップ</h3><canvas id="miniMap"></canvas><p class="note" id="miniNote">アーカイブ配信遅延に注意。欠測は色を塗らず、IRIだけで置き換えません。</p></section>
+  <section><h3>経路のサマリー</h3><dl class="kvs"><dt>大圏距離</dt><dd id="routeDistance">—</dd><dt>有効VTEC（中央値）</dt><dd id="medianTec">—</dd><dt>GPS L1垂直遅延（中央値）</dt><dd id="medianDelay">—</dd><dt>VTECデータ</dt><dd id="tecSource">—</dd></dl><p class="note">GPS L1群遅延は 40.3·TEC·10¹⁶/f² による一次電離圏遅延の目安。実際のGNSS測位誤差・可用性を示すものではありません。</p></section>
+  <section><h3>注意・リンク</h3><p class="note">使用：IRI-2020、SWIFT-TEC、名古屋大学ISEE公開アーカイブ。ISEEの更新が遅れている場合、時刻を必ず明示。航空・通信・軍事運用の判断には使用しない。</p><p class="note"><a href="./animate.html">30分全球VTEC動画</a> · <a href="./impact.html">航空経路のTEC解析</a> · <a href="./year.html">365日の精度履歴</a></p></section>
+</aside></div>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const q={data:null,source:'global',i:0,view:'globe',altIndex:4,mode:'volume',yaw:140,tilt:21,route:[],routeSamples:[],selected:null,selectLat:null,selectLon:null,playing:null,dots:[],drawing:false};
+const C=['#173d83','#169dc3','#53d8b3','#e7de7f','#fd8e3f','#ec394b'];
+const PRESETS={
+ 'tokyo-naha':[[35.68,139.76],[26.21,127.68]],
+ 'sapporo-fukuoka':[[43.06,141.35],[33.59,130.40]],
+ 'tokyo-osaka':[[35.68,139.76],[34.70,135.50]],
+ 'sendai-nagoya':[[38.27,140.87],[35.18,136.91]],
+ 'fukuoka-kagoshima':[[33.59,130.40],[31.60,130.56]],
+ 'tokyo-sydney':[[35.68,139.76],[-33.87,151.21]]
+};
+const RAD=Math.PI/180;
+const isNum=n=>typeof n==='number'&&Number.isFinite(n);
+function format(n,d=1){return isNum(n)?n.toLocaleString('ja-JP',{maximumFractionDigits:d}):'—'}
+function normLon(lon){return ((lon+180)%360+360)%360-180}
+function hexRGB(hex){return [1,3,5].map(i=>parseInt(hex.slice(i,i+2),16))}
+function densityColor(v){if(!isNum(v))return '#64788a';const t=Math.max(0,Math.min(.999,(v-8)/(12.8-8)));const f=t*(C.length-1),i=Math.floor(f),g=f-i;const a=hexRGB(C[i]),b=hexRGB(C[i+1]);return 'rgb('+a.map((n,k)=>Math.round(n*(1-g)+b[k]*g)).join(',')+')'}
+function tecColor(v){if(!isNum(v))return '#526778';const t=Math.max(0,Math.min(.999,v/90));const f=t*(C.length-1),i=Math.floor(f),g=f-i;const a=hexRGB(C[i]),b=hexRGB(C[i+1]);return 'rgb('+a.map((n,k)=>Math.round(n*(1-g)+b[k]*g)).join(',')+')'}
+function sourceFrames(){return q.source==='japan'?(q.data?.japan?.frames||[]):(q.data?.global_frames||[])}
+function frame(){return sourceFrames()[q.i]}
+function modelSites(){return q.source==='japan'?(frame()?.iri_sites||[]):(frame()?.sites||[])}
+function vtecGrid(){return q.source==='japan'?(frame()?.vtec||null):null}
+function altitudes(){return q.data?.metadata?.altitudes_km||[]}
+function canvas(c){const w=Math.max(1,c.clientWidth),h=Math.max(1,c.clientHeight),d=Math.min(devicePixelRatio||1,2);const cw=Math.round(w*d),ch=Math.round(h*d);if(c.width!==cw||c.height!==ch){c.width=cw;c.height=ch}const ctx=c.getContext('2d');ctx.setTransform(d,0,0,d,0,0);return {ctx,w,h}}
+function centerDist(a,b){const a1=a[0]*RAD,a2=b[0]*RAD,dlat=(b[0]-a[0])*RAD,dlon=(b[1]-a[1])*RAD;const u=Math.sin(dlat/2)**2+Math.cos(a1)*Math.cos(a2)*Math.sin(dlon/2)**2;return 12742*Math.asin(Math.min(1,Math.sqrt(Math.max(0,u))))}
+function distanceDeg(a,b){return centerDist([a.lat,a.lon],[b.lat,b.lon])}
+function nearest(lat,lon){const s=modelSites();if(!s.length)return null;let best=s[0],bd=Infinity;for(const v of s){const d=distanceDeg(v,{lat,lon});if(d<bd){bd=d;best=v}}return best}
+function smoothValue(site,alt){const heights=altitudes(),values=site.ne_log10_m3;const m=heights.length;if(!m)return null;if(alt<heights[0]||alt>heights[m-1])return null;for(let i=1;i<m;i++){if(heights[i]>=alt){const v0=values[i-1],v1=values[i];if(!isNum(v0)||!isNum(v1))return null;const t=(alt-heights[i-1])/(heights[i]-heights[i-1]);return Math.log10((1-t)*Math.pow(10,v0)+t*Math.pow(10,v1))}}return values[m-1]}
+function weightsAt(lat,lon,k=4){const a=modelSites().map(s=>({site:s,d:distanceDeg(s,{lat,lon})})).sort((a,b)=>a.d-b.d).slice(0,k);if(!a.length)return[];if(q.source==='japan'&&a[0].d>850)return[];if(a[0].d<.5)return [{site:a[0].site,w:1}];let sum=0;const values=a.map(v=>{const w=1/Math.pow(Math.max(50,v.d),2);sum+=w;return {site:v.site,w}});return values.map(v=>({...v,w:v.w/sum}))}
+function interpolateNe(w,alt){let v=0,sum=0;for(const p of w){const x=smoothValue(p.site,alt);if(isNum(x)){sum+=p.w;v+=p.w*Math.pow(10,x)}}return sum?Math.log10(v/sum):null}
+function median(a){const b=a.filter(isNum).sort((x,y)=>x-y);return b.length?(b.length%2?b[(b.length-1)/2]:(b[b.length/2-1]+b[b.length/2])/2):null}
+function vtecAt(lat,lon){if(q.source!=='japan'){
+ const a=modelSites().filter(s=>isNum(s.vtec_swifttec_tecu));if(!a.length)return null;
+ const z=a.map(s=>({s,d:distanceDeg(s,{lat,lon})})).sort((x,y)=>x.d-y.d).slice(0,4);
+ if(z[0].d<.5)return z[0].s.vtec_swifttec_tecu;
+ let sum=0,v=0;for(const p of z){const w=1/Math.max(50,p.d)**2;sum+=w;v+=w*p.s.vtec_swifttec_tecu}return sum?v/sum:null;
+ }
+ const g=vtecGrid();if(!g)return null;const la=g.lat_arr,lo=g.lon_arr;if(lat<la[0]||lat>la[la.length-1]||lon<lo[0]||lon>lo[lo.length-1])return null;
+ function at(arr,x){let low=0,high=arr.length-1;while(high-low>1){const m=(low+high)>>1;if(arr[m]<=x)low=m;else high=m}return low}
+ const i=at(la,lat),j=at(lo,lon),p=[g.grid_tecu[i][j],g.grid_tecu[i+1][j],g.grid_tecu[i][j+1],g.grid_tecu[i+1][j+1]];
+ if(p.some(x=>!isNum(x)))return null;const t=(lat-la[i])/(la[i+1]-la[i]),u=(lon-lo[j])/(lo[j+1]-lo[j]);return (1-t)*((1-u)*p[0]+u*p[2])+t*((1-u)*p[1]+u*p[3]);
+}
+function vec(p){const la=p[0]*RAD,lo=p[1]*RAD;return [Math.cos(la)*Math.cos(lo),Math.cos(la)*Math.sin(lo),Math.sin(la)]}
+function between(a,b,t){const v=vec(a),w=vec(b),dot=Math.max(-1,Math.min(1,v.reduce((s,x,i)=>s+x*w[i],0))),omega=Math.acos(dot);let out;if(omega<1e-6){out=v.map((x,i)=>(1-t)*x+t*w[i])}else{const aa=Math.sin((1-t)*omega)/Math.sin(omega),bb=Math.sin(t*omega)/Math.sin(omega);out=v.map((x,i)=>aa*x+bb*w[i])}const len=Math.hypot(...out);return [Math.asin(out[2]/len)/RAD,normLon(Math.atan2(out[1],out[0])/RAD)]}
+function routeSamples(){const route=q.route;if(route.length<2)return[];const lens=route.slice(1).map((p,i)=>centerDist(route[i],p)),total=lens.reduce((a,b)=>a+b,0),N=80;let acc=0,results=[];for(let i=0;i<=N;i++){const km=total*i/N;let j=0,s=0;while(j<lens.length-1&&s+lens[j]<km){s+=lens[j];j++}const a=route[j],b=route[j+1],t=lens[j]?Math.max(0,Math.min(1,(km-s)/lens[j])):0;const [lat,lon]=between(a,b,t);results.push({lat,lon,dist_km:km,tec:vtecAt(lat,lon)});}return results}
+function setRoute(raw){const parts=raw.trim().split(/\n+/).map(s=>s.trim()).filter(Boolean);if(parts.length<2||parts.length>12)throw Error('2〜12地点を入力してください');const out=parts.map((s,i)=>{const items=s.split(/[\s,，]+/).filter(Boolean);if(items.length!==2)throw Error(`${i+1}行目: 緯度,経度 の2値が必要`);const v=items.map(Number);if(v.some(x=>!isNum(x))||Math.abs(v[0])>90||Math.abs(v[1])>180)throw Error(`${i+1}行目: 座標が無効`);return v});q.route=out;refresh();}
+function project(lat,lon,alt,w,h,R){const d=(lon-q.yaw)*RAD,lr=lat*RAD,tilt=q.tilt*RAD,co=Math.cos(lr),si=Math.sin(lr);const x=co*Math.sin(d),y=si*Math.cos(tilt)-co*Math.cos(d)*Math.sin(tilt),z=si*Math.sin(tilt)+co*Math.cos(d)*Math.cos(tilt);const scale=1+(alt/1000)*.42;return {x:w*.53+R*x*scale,y:h*.52-R*y*scale,z:z*scale}}
+function globe(){const {ctx,w,h}=canvas($('mainCanvas'));ctx.fillStyle='#061625';ctx.fillRect(0,0,w,h);const R=Math.min(w*.36,h*.42),cx=w*.53,cy=h*.52;
+ for(let i=0;i<100;i++){const x=((i*7127+137)%1000)/1000*w,y=((i*3761+93)%1000)/1000*h;ctx.fillStyle=i%4===0?'#6188a44a':'#b3dfed25';ctx.fillRect(x,y,1,1)}
+ const gr=ctx.createRadialGradient(cx-R*.38,cy-R*.44,R*.12,cx,cy,R);gr.addColorStop(0,'#225779');gr.addColorStop(.62,'#103b61');gr.addColorStop(.95,'#08243b');gr.addColorStop(1,'#38c8eb');ctx.fillStyle=gr;ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);ctx.fill();
+ ctx.save();ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);ctx.clip();
+ ctx.strokeStyle='#7fc2d628';ctx.lineWidth=.9;
+ for(let latitude=-75;latitude<=75;latitude+=15){ctx.beginPath();let on=false;for(let longitude=-180;longitude<=180;longitude+=3){const p=project(latitude,longitude,0,w,h,R);if(p.z<=0){on=false;continue}if(!on){ctx.moveTo(p.x,p.y);on=true}else ctx.lineTo(p.x,p.y)}ctx.stroke()}
+ for(let longitude=-180;longitude<180;longitude+=15){ctx.beginPath();let on=false;for(let latitude=-90;latitude<=90;latitude+=3){const p=project(latitude,longitude,0,w,h,R);if(p.z<=0){on=false;continue}if(!on){ctx.moveTo(p.x,p.y);on=true}else ctx.lineTo(p.x,p.y)}ctx.stroke()}
+ const g=vtecGrid();if(g){for(let i=0;i<g.lat_arr.length;i++){for(let j=0;j<g.lon_arr.length;j++){const v=g.grid_tecu[i][j];if(!isNum(v))continue;const p=project(g.lat_arr[i],g.lon_arr[j],0,w,h,R);if(p.z<=0)continue;ctx.fillStyle=tecColor(v);ctx.globalAlpha=.7;ctx.fillRect(p.x-2,p.y-2,4,4)}}ctx.globalAlpha=1}
+ ctx.restore();
+ // Exaggerated 3-D model point cloud. Never mix TEC units with electron density.
+ q.dots=[];const spots=modelSites(),alts=altitudes(),pts=[];
+ for(const s of spots){for(let k=0;k<alts.length;k++){if(q.mode==='height'&&k!==q.altIndex)continue;const v=s.ne_log10_m3[k];if(!isNum(v))continue;const p=project(s.lat,s.lon,alts[k],w,h,R);if(p.z<-.05)continue;pts.push({...p,s,v,alt:alts[k],pickable:k===q.altIndex})}}
+ pts.sort((a,b)=>a.z-b.z);for(const p of pts){ctx.globalAlpha=q.mode==='volume'?Math.max(.15,Math.min(.62,(p.v-8)/8)):.87;ctx.fillStyle=densityColor(p.v);ctx.beginPath();ctx.arc(p.x,p.y,q.mode==='volume'?Math.max(2.1,p.v-8):4.3,0,2*Math.PI);ctx.fill();if(p.pickable)q.dots.push(p)}ctx.globalAlpha=1;
+ if(q.route.length>=2){ctx.strokeStyle='#ffcf7b';ctx.lineWidth=2.2;ctx.setLineDash([5,4]);ctx.beginPath();let started=false;for(const p0 of q.routeSamples){const p=project(p0.lat,p0.lon,10,w,h,R);if(p.z<0){started=false;continue}if(!started){ctx.moveTo(p.x,p.y);started=true}else ctx.lineTo(p.x,p.y)}ctx.stroke();ctx.setLineDash([])}
+ ctx.fillStyle='#afcedf';ctx.font='12px system-ui';ctx.fillText('ドラッグ：回転　点：地点選択　高度方向を模式的に誇張',15,h-15)
+}
+function clearBg(ctx,w,h){ctx.fillStyle='#081b2a';ctx.fillRect(0,0,w,h)}
+function drawAxes(ctx,w,h,left,top,right,bottom,label){ctx.strokeStyle='#43677a';ctx.strokeRect(left,top,right-left,bottom-top);ctx.fillStyle='#bed8e7';ctx.font='11px system-ui';ctx.fillText(label,left+4,top-8)}
+function section(which){const {ctx,w,h}=canvas($('mainCanvas'));clearBg(ctx,w,h);const s=q.routeSamples;if(!s.length||!modelSites().length){ctx.fillStyle='#dde';ctx.fillText('IRI断面を表示できません',20,40);return}
+ const l=57,r=w-22,t=34,b=h-48,N=s.length,maxAlt=1000,step=25;
+ for(let i=0;i<N;i++){const ws=weightsAt(s[i].lat,s[i].lon,4),x=l+(r-l)*i/N;for(let alt=100;alt<=1000;alt+=step){const v=interpolateNe(ws,alt);if(!isNum(v))continue;ctx.fillStyle=densityColor(v);const y=b-alt/maxAlt*(b-t),y2=b-(alt-step)/maxAlt*(b-t);ctx.fillRect(x,y,(r-l)/N+1,y2-y+1)}}
+ ctx.strokeStyle='#597586';ctx.lineWidth=1;for(const alt of [0,100,200,300,400,600,800,1000]){const y=b-alt/maxAlt*(b-t);ctx.beginPath();ctx.moveTo(l,y);ctx.lineTo(r,y);ctx.stroke();ctx.fillStyle='#b9d3df';ctx.fillText(alt+' km',6,y+3)}
+ const plane=Number($('planeAlt').value),yPlane=b-plane/maxAlt*(b-t);ctx.strokeStyle='#ffe4a0';ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(l,yPlane);ctx.lineTo(r,yPlane);ctx.stroke();ctx.setLineDash([]);
+ drawAxes(ctx,w,h,l,t,r,b,which==='route'?'AVIATION ROUTE × ELECTRON DENSITY':'VERTICAL ELECTRON DENSITY SECTION');
+ const d=s.at(-1).dist_km;ctx.fillText('0 km',l,b+17);ctx.textAlign='right';ctx.fillText(format(d,0)+' km',r,b+17);ctx.textAlign='left';ctx.fillText('100–1000 km: IRI model / spatial IDW',l,b+33);
+}
+function slice(){const {ctx,w,h}=canvas($('mainCanvas'));clearBg(ctx,w,h);const sites=modelSites();if(!sites.length){ctx.fillStyle='#fff';ctx.fillText('IRI regional profile unavailable',20,25);return}
+ const japan=q.source==='japan',lonA=japan?122: -180,lonB=japan?151:180,latA=japan?23: -90,latB=japan?47:90;const l=50,r=w-18,t=24,b=h-39;
+ const nx=Math.min(120,Math.max(60,Math.floor((r-l)/5))),ny=Math.min(72,Math.max(36,Math.floor((b-t)/5)));const at=altitudes()[q.altIndex];
+ for(let i=0;i<nx;i++){const lon=lonA+(lonB-lonA)*(i+.5)/nx;for(let j=0;j<ny;j++){const lat=latB-(latB-latA)*(j+.5)/ny;const val=interpolateNe(weightsAt(lat,lon,4),at);ctx.fillStyle=isNum(val)?densityColor(val):'#182e3c';ctx.fillRect(l+i*(r-l)/nx,t+j*(b-t)/ny,(r-l)/nx+1,(b-t)/ny+1)}}
+ ctx.strokeStyle='#365970';ctx.lineWidth=.7;for(let lat=Math.ceil(latA/5)*5;lat<latB;lat+=5){const y=t+(latB-lat)/(latB-latA)*(b-t);ctx.beginPath();ctx.moveTo(l,y);ctx.lineTo(r,y);ctx.stroke()}for(let lon=Math.ceil(lonA/10)*10;lon<lonB;lon+=10){const x=l+(lon-lonA)/(lonB-lonA)*(r-l);ctx.beginPath();ctx.moveTo(x,t);ctx.lineTo(x,b);ctx.stroke()}
+ for(const site of sites){const x=l+(site.lon-lonA)/(lonB-lonA)*(r-l),y=t+(latB-site.lat)/(latB-latA)*(b-t);if(x<l||x>r||y<t||y>b)continue;ctx.strokeStyle='#e7f2ff99';ctx.strokeRect(x-2,y-2,4,4)}
+ if(q.selected){const x=l+(q.selected.lon-lonA)/(lonB-lonA)*(r-l),y=t+(latB-q.selected.lat)/(latB-latA)*(b-t);ctx.strokeStyle='#fff';ctx.beginPath();ctx.arc(x,y,7,0,7);ctx.stroke()}
+ drawAxes(ctx,w,h,l,t,r,b,'HORIZONTAL IRI MODEL SLICE  •  '+at+' km');ctx.fillStyle='#b5d5e8';ctx.fillText(lonA+'°E',l,b+18);ctx.textAlign='right';ctx.fillText(lonB+'°E',r,b+18);ctx.textAlign='left';q.sliceBounds={l,r,t,b,lonA,lonB,latA,latB}
+}
+function drawLineChart(el,draw){const {ctx,w,h}=canvas($(el));clearBg(ctx,w,h);draw(ctx,w,h)}
+function profile(){drawLineChart('profileCanvas',(ctx,w,h)=>{const site=q.selected;if(!site){ctx.fillStyle='#bad7e6';ctx.fillText('地球儀・高度スライスで地点を選択',12,29);return}const l=40,r=w-12,t=10,b=h-26,a=altitudes();ctx.strokeStyle='#3c6077';ctx.strokeRect(l,t,r-l,b-t);const logx=x=>l+(x-8)/5*(r-l),hy=y=>b-(y-100)/900*(b-t);for(let j=0;j<a.length;j++){if(!isNum(site.ne_log10_m3[j]))continue;const x=logx(site.ne_log10_m3[j]),y=hy(a[j]);if(j===0){ctx.strokeStyle='#62def1';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y)}else ctx.lineTo(x,y)}ctx.stroke();ctx.fillStyle='#a8cfe3';ctx.font='10px system-ui';ctx.fillText('log10 Ne [m⁻³] →',l,b+16);ctx.fillText('1000 km',0,t+4);ctx.fillText('100 km',0,b);})}
+function tecChart(){drawLineChart('tecCanvas',(ctx,w,h)=>{const s=q.routeSamples;if(!s.length){ctx.fillStyle='#b9d8eb';ctx.fillText('経路を設定してください',12,22);return}const l=37,r=w-12,t=16,b=h-28,vals=s.map(a=>a.tec).filter(isNum);if(vals.length<2){ctx.fillStyle='#ffdc9d';ctx.fillText('該当時刻・位置のVTECがありません',12,28);return}const max=Math.max(10,Math.ceil(Math.max(...vals)/10)*10);ctx.strokeStyle='#3c6077';ctx.strokeRect(l,t,r-l,b-t);ctx.strokeStyle='#fdd083';ctx.lineWidth=1.7;ctx.beginPath();let on=false;for(let i=0;i<s.length;i++){const v=s[i].tec;if(!isNum(v)){on=false;continue}const x=l+(r-l)*i/(s.length-1),y=b-(b-t)*v/max;if(!on){ctx.moveTo(x,y);on=true}else ctx.lineTo(x,y)}ctx.stroke();ctx.fillStyle='#b4d2df';ctx.font='10px system-ui';ctx.fillText(max+' TECU',1,t+5);ctx.fillText('0',18,b+3);ctx.fillText('0 km',l,b+17);ctx.textAlign='right';ctx.fillText(format(s.at(-1).dist_km,0)+' km',r,b+17);ctx.textAlign='left'})}
+function miniMap(){const {ctx,w,h}=canvas($('miniMap'));clearBg(ctx,w,h);const grid=vtecGrid();if(!grid){ctx.fillStyle='#bcd0dd';ctx.fillText('全球IRI: ISEEデータの表示なし',12,24);return}const la=grid.lat_arr,lo=grid.lon_arr,nx=lo.length,ny=la.length;for(let i=0;i<ny;i++){for(let j=0;j<nx;j++){const v=grid.grid_tecu[i][j];ctx.fillStyle=isNum(v)?tecColor(v):'#122d42';const x=14+j*(w-28)/nx,y=10+(ny-1-i)*(h-22)/ny;ctx.fillRect(x,y,(w-28)/nx+1,(h-22)/ny+1)}}if(q.selected){const x=14+(q.selected.lon-lo[0])/(lo.at(-1)-lo[0])*(w-28),y=10+(la.at(-1)-q.selected.lat)/(la.at(-1)-la[0])*(h-22);ctx.strokeStyle='#fff';ctx.beginPath();ctx.arc(x,y,5,0,7);ctx.stroke()}}
+function renderMeta(){const f=frame(),ss=modelSites();$('siteCount').textContent=ss.length.toLocaleString('ja-JP');const vals=q.routeSamples.map(s=>s.tec).filter(isNum);$('tecCount').textContent=vals.length+'/'+q.routeSamples.length;let med=median(vals);$('medianTec').textContent=isNum(med)?format(med,1)+' TECU':'—';$('medianDelay').textContent=isNum(med)?format(40.3*med*1e16/(1575.42e6**2),2)+' m':'—';$('routeDistance').textContent=q.routeSamples.length?format(q.routeSamples.at(-1).dist_km,0)+' km':'—';$('tecSource').textContent=q.source==='japan'?'ISEE AGRID2 観測VTEC':'SWIFT-TEC モデルVTEC';
+ let s=q.selected;const diag=s?.iri||{};const n=isNum(diag.nmf2_m3)?diag.nmf2_m3:isNum(diag.NmF2_m3)?diag.NmF2_m3:null;
+ $('peakValue').textContent=isNum(n)?n.toExponential(2):'—';$('hValue').textContent=isNum(diag.hmf2_km)?format(diag.hmf2_km,0):'—';$('selFof2').textContent=isNum(diag.fof2_mhz)?format(diag.fof2_mhz,2)+' MHz':'—';$('selLat').textContent=s?format(s.lat,2)+'°':'—';$('selLon').textContent=s?format(s.lon,2)+'°':'—';$('selMethod').textContent=s?.method||'—';
+ $('sourceMeta').textContent=q.source==='japan'?'ISEE観測 UTC '+f.valid_at+(ss.length?' / 同時刻IRI計算':' / IRI計算不可'):'IRIモデル UTC '+f.valid_at;
+ $('ageNote').textContent=q.source==='japan'?'ISEE元観測の遅延：'+format(f.source_age_hours,1)+'時間。過去の資料であり現在の状況ではありません。':'IRIモデルは気候値計算。全球格子の高解像度実測ではありません。';
+ $('timeNote').textContent=q.source==='japan'?'ISEEアーカイブの30分スロット（欠測時は飛びます）。各時刻にIRIを別途計算。':'IRI気候モデルのサンプル時刻。30分間隔とは限りません。';
+ $('miniNote').textContent=q.source==='japan'?'ISEE AGRID2 VTEC [TECU]：'+f.valid_at+'（空白は観測欠損）':'日本のVTECを表示する場合は「日本 ISEE」を選択';
+ $('tecTitle').textContent=q.source==='japan'?'経路上のISEE観測VTEC [TECU]':'経路上のSWIFT-TECモデルVTEC [TECU]';
+}
+function setStatus(s){$('status').textContent=s}
+function refresh(){if(!q.data||!sourceFrames().length)return;const f=frame(),ss=modelSites();q.routeSamples=routeSamples();if(q.selectLat!==null){q.selected=nearest(q.selectLat,q.selectLon)}else if(!q.selected){q.selected=nearest(35.68,139.76)}else{q.selected=nearest(q.selected.lat,q.selected.lon)}
+ $('frame').value=String(q.i);$('altLabel').textContent=altitudes()[q.altIndex]+' km';$('viewTitle').textContent=({globe:'3D電子密度の立体構造',section:'GAIA型・電子密度の垂直断面',slice:'高度別・水平電子密度マップ',route:'飛行経路に沿った電離圏断面'})[q.view];$('viewSubtitle').textContent=q.source==='japan'?'ISEE archived VTEC + IRI same UTC':'IRI model + SWIFT-TEC VTEC (distinct quantities)';$('canvasHint').textContent=q.view==='globe'?'ドラッグ：回転　点をクリック：地点選択':q.view==='slice'?'クリック：位置に最も近いIRI計算地点を選択':'経路：左の都市間プリセット／任意座標から変更';
+ $('legendTitle').textContent='IRI 電子密度 Ne';$('legendRange').textContent='10⁸ → 約10¹²·⁸ m⁻³';
+ if(q.view==='globe')globe();else if(q.view==='slice')slice();else section(q.view);
+ profile();tecChart();miniMap();renderMeta();setStatus(`状態：${q.source==='japan'?'ISEE VTEC・同時刻IRI':'全球IRI'}表示中\n表示UTC：${f.valid_at}\n計算：${ss.length} IRI地点 / 経路 ${q.routeSamples.length}点。\n欠測は補完せず「—」表示。`)}
+function stop(){if(q.playing){clearInterval(q.playing);q.playing=null}$('play').textContent='▶ 再生'}
+function pickPoint(lat,lon){q.selectLat=lat;q.selectLon=lon;q.selected=nearest(lat,lon);$('pointLat').value=lat.toFixed(2);$('pointLon').value=lon.toFixed(2);refresh()}
+function initSource(){stop();let frames=sourceFrames();if(!frames.length){q.source='global';$('source').value='global';frames=sourceFrames()}$('frame').replaceChildren();frames.forEach((f,i)=>$('frame').add(new Option(f.valid_at,String(i))));q.i=frames.length?frames.length-1:0;$('frame').value=String(q.i);q.selected=null;q.selectLat=null;if(q.source==='japan'){q.yaw=137;q.tilt=23}else{q.yaw=140;q.tilt=21}$('tilt').value=q.tilt;refresh()}
+async function start(){try{const res=await fetch('./explorer_data.json',{cache:'no-store'});if(!res.ok)throw Error('explorer_data.json HTTP '+res.status);q.data=await res.json();if(q.data.schema!=='swift-ion-explorer-v1.4')throw Error('unsupported explorer_data.json schema');if(!Array.isArray(q.data.global_frames)||!q.data.global_frames.length)throw Error('global IRI model frames not present');q.source=q.data.japan?.status==='AVAILABLE'?'japan':'global';$('source').value=q.source;const a=PRESETS['tokyo-naha'];q.route=a;$('routeText').value=a.map(p=>p.join(', ')).join('\n');$('alt').max=String(altitudes().length-1);initSource();if(q.source==='global')setStatus('ISEEアーカイブを取得できなかったため全球IRIのみ。実データを捏造していません。\n'+q.data.japan?.note);}catch(e){setStatus('読み込み失敗：'+e.message+'。GitHub Actionsの「Build GAIA-style IRI/ISEE explorer」で生成処理を確認してください。')}}
+$('source').addEventListener('change',e=>{q.source=e.target.value;initSource()});$('frame').addEventListener('change',e=>{q.i=+e.target.value||0;refresh()});$('prev').onclick=()=>{q.i=(q.i-1+sourceFrames().length)%sourceFrames().length;refresh()};$('next').onclick=()=>{q.i=(q.i+1)%sourceFrames().length;refresh()};$('play').onclick=()=>{if(q.playing){stop();return}if(sourceFrames().length<=1)return;$('play').textContent='■ 一時停止';q.playing=setInterval(()=>{q.i=(q.i+1)%sourceFrames().length;refresh()},1000)};
+$('alt').oninput=e=>{q.altIndex=+e.target.value;refresh()};$('mode3d').onchange=e=>{q.mode=e.target.value;refresh()};$('tilt').oninput=e=>{q.tilt=+e.target.value;refresh()};$('planeAlt').onchange=()=>refresh();
+for(const b of document.querySelectorAll('.tabs button')){b.onclick=()=>{q.view=b.dataset.view;document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x===b));refresh()}};
+$('city').onchange=e=>{const p=e.target.value.split(',').map(Number);if(p.length===2)pickPoint(p[0],p[1])};
+$('setPoint').onclick=()=>{const lat=Number($('pointLat').value),lon=Number($('pointLon').value);if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180){setStatus('地点の緯度・経度が無効です');return}pickPoint(lat,lon)};
+$('preset').onchange=e=>{const pts=PRESETS[e.target.value];if(pts)$('routeText').value=pts.map(p=>p.join(', ')).join('\n')};$('applyRoute').onclick=()=>{try{setRoute($('routeText').value)}catch(e){setStatus('経路入力：'+e.message)}};$('resetCamera').onclick=()=>{q.yaw=q.source==='japan'?137:140;q.tilt=21;$('tilt').value=21;refresh()};
+let drag=null;const main=$('mainCanvas');main.addEventListener('pointerdown',e=>{if(q.view!=='globe')return;drag={x:e.clientX,y:e.clientY,moved:false,yaw:q.yaw,tilt:q.tilt};main.setPointerCapture(e.pointerId)});main.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>6)drag.moved=true;if(drag.moved){q.yaw=normLon(drag.yaw-dx*.35);q.tilt=Math.max(-70,Math.min(70,drag.tilt+dy*.2));$('tilt').value=q.tilt;globe()}});main.addEventListener('pointerup',e=>{if(!drag)return;const moved=drag.moved;drag=null;if(moved)return;const box=main.getBoundingClientRect(),x=e.clientX-box.left,y=e.clientY-box.top;
+ let picked=null,d=25;for(const p of q.dots){const dist=Math.hypot(x-p.x,y-p.y);if(dist<d){picked=p.s;d=dist}}if(picked)pickPoint(picked.lat,picked.lon)});
+main.addEventListener('click',e=>{if(q.view!=='slice'||!q.sliceBounds)return;const c=q.sliceBounds,r=main.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;if(x<c.l||x>c.r||y<c.t||y>c.b)return;const lon=c.lonA+(x-c.l)/(c.r-c.l)*(c.lonB-c.lonA),lat=c.latB-(y-c.t)/(c.b-c.t)*(c.latB-c.latA);pickPoint(lat,lon)});
+window.addEventListener('resize',()=>{if(q.data)refresh()});start();
+</script></body></html>

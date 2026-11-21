@@ -76,6 +76,26 @@ jobs:
       - name: Export IRI density slices for 3D globe
         run: python scripts/build_density_slices.py
 
+      # ISEE Japan is archived VTEC, NOT current 3D electron density.
+      # Re-run sparse IRI at the exact archived ISEE UTC for physically honest sections.
+      - name: Build GAIA-style IRI and ISEE Japan explorer
+        run: |
+          python scripts/build_3d_explorer.py \
+            --ionosphere docs/ionosphere.json \
+            --isee-archive _upstream_swifttec/docs/data/isee_tec \
+            --regional-sites 36 \
+            --max-isee-frames 3 \
+            --output docs/explorer_data.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('docs/explorer_data.json').read_text(encoding='utf-8'))
+          assert d['schema']=='swift-ion-explorer-v1.4'
+          assert len(d['global_frames'])==5
+          assert d['metadata']['is_observed_3d_density'] is False
+          print('Explorer:',d['japan']['status'],'Japan frames=',len(d['japan']['frames']))
+          PY
+
       - name: Validate ionosphere JSON
         run: |
           python - <<'PY'
@@ -178,6 +198,7 @@ jobs:
             docs/year_accuracy.json
             docs/space_weather.json
             docs/density_slices.json
+            docs/explorer_data.json
             docs/animation/index.json
           retention-days: 7
           if-no-files-found: error
