@@ -1,31 +1,25 @@
-# SWIFT-ION v0.9 — Ionosonde observational comparison
+# SWIFT-ION v0.9.1: KC2G time parsing / bad_shape repair
 
-**Includes a critical fix:** `.github/workflows/pages.yml` in the connected SWIFT-ION repository contained unresolved Git conflict markers again. This package **replaces the entire file** with a clean workflow. Do not merge it line-by-line.
+## Why
+The displayed ionosonde report read 101 records but dropped all as `bad_shape`. The original `parse_stations` classified failures parsing `time` as `bad_shape`. The upstream KC2G `Measurement.time` model uses a timezone-naive SQL `DateTime`; its Marshmallow serialization may therefore supply ISO-8601 timestamps with no `Z` or UTC offset. This is a probable root cause, not yet verified against the actual 101 raw records.
 
-## Installation (GitHub Desktop)
+## Change
+- For **KC2G station records only**, interpret ISO time without an offset as **UTC** (explicit source-specific assumption); retain offset-aware conversion when supplied.
+- Classify invalid timestamps separately as `bad_timestamp`.
+- Add safe `schema_diagnostic` (field names/types only) to the output and the Action log when data are unusable.
+- Preserve original station filters: observations 6h max age, CS minimum 70 when present, nonzero valid foF2/hmF2, location and longitude validation; no synthetic fallback.
+- Include 8 focused regression tests.
+- No changes to SWIFT-TEC calculation, IRI, GitHub Actions, or public HTML required.
 
-1. Extract the ZIP.
-2. Copy all 4 folders `.github`, `docs`, `scripts`, `tests` into the root of your local `SWIFT-ION` repository. Confirm overwrite when prompted. Do **not** copy into the upstream SWIFT-TEC repository.
-3. Open `.github/workflows/pages.yml` and confirm `<<<<<<<`, `=======`, `>>>>>>>` are absent.
-4. Commit summary: `Fix Pages workflow and add GIRO ionosonde validation`.
-5. **Commit to main → Push origin**. Check `Actions → Build and publish SWIFT-ION`.
-6. Check `Ionosonde verification against IRI climatology`, then open `https://sgsy4c2zh7-tech.github.io/SWIFT-ION/ionosonde.html`.
+## Install
+1. Extract this ZIP. Copy `scripts/` and `tests/` **into the SWIFT-ION repo root**, overwriting `scripts/validate_ionosondes.py` only.
+2. GitHub Desktop Summary: `Fix KC2G ionosonde UTC timestamp parsing`.
+3. Commit to main -> Push origin. Github Actions automatically rebuilds and deploys.
+4. Inspect `Ionosonde verification against IRI climatology` and https://sgsy4c2zh7-tech.github.io/SWIFT-ION/ionosonde.html.
+5. If still 0 stations, look in the Action log for `Rejected record counts` and `SCHEMA_DIAGNOSTIC`, and on the page for reason-specific counts. Do not loosen time/confidence constraints before understanding the actual data.
 
-If network access to KC2G fails or no recent station records are available, `ionosonde_validation.json` is still produced with status `SOURCE_UNAVAILABLE` or `NO_USABLE_OBSERVATIONS`, and the screen displays *no results*, not fabricated error statistics. Existing SWIFT-TEC and IRI calculation steps remain unchanged in their underlying scripts.
+## Validation
+Local tests: `python -m unittest discover -s tests -v` (in full repo), or this patch's `python -m unittest discover -s tests -v`. The package was tested with 8 new regression cases, but access to live KC2G feed from the sandbox was unavailable, so the real fetch/IRI run remains to be verified by GitHub Actions.
 
-## What is scientifically measured?
-
-IRI is run at **each ionosonde observation time and position** (up to 16 geographically dispersed stations / run). Only then is the estimated F2 critical frequency (`foF2`) and the approximate sampled-maximum peak altitude (`hmF2`) compared with station measurements. This is climatological-model discrepancy, **not proof of forecast skill**. The source is a public KC2G station feed derived from GIRO/INGV, not the official authenticated DIDBase raw feed. It may reflect autoscaled or manually validated data.
-
-The license is GIRO CC BY-NC-SA 4.0 and Rules of the Road. This is strictly a non-commercial, educational/research evaluation and not for operational decisions. Acknowledge KC2G, GIRO and each station data provider: see `docs/IONOSONDE_VALIDATION.md`.
-
-## Data and website
-
-- Python: `scripts/validate_ionosondes.py`
-- Tests: `tests/test_ionosonde_validation.py`
-- Output: `docs/ionosonde_validation.json` (generated at Actions runtime; not committed)
-- UI: `docs/ionosonde.html`
-- Source/license documentation: `docs/IONOSONDE_VALIDATION.md`
-- Workflow: `.github/workflows/pages.yml`
-
-The first Actions run may reveal external service access or IRI runtime limitations. The patch passed local parser/statistical tests and syntax checks; **it has not been verified running end-to-end on GitHub Actions**.
+## Attribution / operational limitations
+Data from KC2G derived from GIRO/INGV. Respect noncommercial/attribution requirements. foF2/hmF2 is **IRI model vs observed station** at measurement time, NOT a validated future forecast. Source datetime policy is a deliberate assumption that must be rechecked if upstream source changes.

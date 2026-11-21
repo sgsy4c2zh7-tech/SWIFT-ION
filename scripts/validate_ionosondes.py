@@ -1,15 +1,15 @@
-"""SWIFT-ION v0.9: near-real-time ionosonde vs IRI *climatology* check.
+"""SWIFT-ION v0.9.1: ionosonde observations vs IRI climatology.
 
-Source: KC2G station aggregate (GIRO/INGV upstream). This is not an
-independent assessment of forecast skill; IRI is evaluated at the recorded
-measurement time and station position. No fabricated observation fallback.
-
-The source data inherit GIRO CC BY-NC-SA 4.0 and station-level attribution.
-Use only for permitted non-commercial research. Do not use operationally.
+Public KC2G GIRO/INGV-derived station feed. For this source ONLY,
+naive ISO datetime strings are interpreted as UTC; the upstream database
+model stores measurement timestamps without timezone information.
+This is a source-specific, documented assumption, not a universal rule.
+No fabricated data. Non-commercial research; station-level attribution required.
 """
 from __future__ import annotations
+
 import argparse
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 import json
 import math
 from pathlib import Path
@@ -25,10 +25,15 @@ GIRO_RULES = 'https://giro.uml.edu/didbase/RulesOfTheRoad.html'
 STATION_ACKNOWLEDGEMENTS = 'https://giro.uml.edu/didbase/acknowledgements.htm'
 
 
-def utc(value):
-    dt = datetime.fromisoformat(str(value).strip().replace('Z', '+00:00'))
+def utc(value, *, kc2g_naive_utc=False):
+    """Return aware UTC datetime; allow naive UTC only for the KC2G feed."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError('Observation timestamp must be a non-empty ISO8601 string')
+    dt = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
     if dt.tzinfo is None:
-        raise ValueError('Observation timestamp must specify UTC offset')
+        if not kc2g_naive_utc:
+            raise ValueError('Observation timestamp must specify UTC offset')
+        dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
 
 
@@ -42,17 +47,40 @@ def number(value, low, high):
     return val if math.isfinite(val) and low <= val <= high else None
 
 
-def parse_stations(body, now=None, max_age_hours=6, min_confidence=70):
-    """Parse documented KC2G /api/stations.json shape (station, time, fof2, hmf2, cs).
+def schema_diagnostic(body):
+    """Expose only structure, never raw public station records in build logs."""
+    if not isinstance(body, list):
+        return {'type': type(body).__name__}
+    first = next((r for r in body if isinstance(r, dict)), None)
+    if first is None:
+        return {'type': 'list', 'record_type': type(body[0]).__name__ if body else 'empty'}
+    station = first.get('station')
+    timestamp = first.get('time')
+    return {
+        'type': 'list',
+        'record_keys': sorted(first),
+        'station_type': type(station).__name__,
+        'station_keys': sorted(station) if isinstance(station, dict) else [],
+        'time_type': type(timestamp).__name__,
+        'time_has_utc_designator': (isinstance(timestamp, str) and
+                                    (timestamp.endswith('Z') or '+' in timestamp[10:] or '-' in timestamp[10:])),
+    }
 
-    Do not substitute a guessed number for missing observational parameters.
-    A record with no CS remains usable, but is explicitly marked unknown.
+
+def parse_stations(body, now=None, max_age_hours=6, min_confidence=70):
+    """Read KC2G MeasurementSchema (station nested; time UTC with/without offset).
+
+    A failed timestamp is counted as bad_timestamp, not bad_shape.
+    Future records, stale records and low-confidence records are excluded.
     """
     now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        raise ValueError('Reference time must contain timezone')
     if not isinstance(body, list):
         raise ValueError('Expected JSON array from /api/stations.json')
-    kept, skipped = {}, {'bad_shape': 0, 'stale': 0, 'bad_coords': 0,
-                         'no_characteristics': 0, 'low_confidence': 0}
+    kept = {}
+    skipped = {'bad_shape': 0, 'bad_timestamp': 0, 'stale': 0,
+               'bad_coords': 0, 'no_characteristics': 0, 'low_confidence': 0}
     for record in body:
         if not isinstance(record, dict) or not isinstance(record.get('station'), dict):
             skipped['bad_shape'] += 1
@@ -66,9 +94,9 @@ def parse_stations(body, now=None, max_age_hours=6, min_confidence=70):
             continue
         lon = ((lon + 180) % 360) - 180
         try:
-            valid_at = utc(record['time'])
-        except (ValueError, KeyError, TypeError):
-            skipped['bad_shape'] += 1
+            valid_at = utc(record['time'], kc2g_naive_utc=True)
+        except (ValueError, KeyError, TypeError, OverflowError):
+            skipped['bad_timestamp'] += 1
             continue
         age = (now - valid_at).total_seconds() / 3600
         if age < -0.25 or age > max_age_hours:
@@ -102,7 +130,6 @@ def separation_km(a, b):
 
 
 def global_sample(records, limit):
-    """Select distributed stations; avoid clustered first-N sampling."""
     if not records or limit < 1:
         return []
     records = sorted(records, key=lambda x: (x['station'], x['lat'], x['lon']))
@@ -120,7 +147,6 @@ def global_sample(records, limit):
 
 
 def error_stats(pairs, unit):
-    """bias = IRI estimate - ionosonde observation; not a forecast-skill score."""
     if not pairs:
         return {'status': 'NO_MATCHES', 'sample_count': 0, 'unit': unit,
                 'mae': None, 'rmse': None, 'bias': None}
@@ -132,10 +158,8 @@ def error_stats(pairs, unit):
 
 
 def compare_station(IRI, obs):
-    # Evaluate at the *observation* time and location, NOT an arbitrary future
-    # forecast timestamp, so there is no temporal/spatial match ambiguity.
     from build_ionosphere import extract_iri_profile, diagnose
-    t = utc(obs['observed_at'])
+    t = utc(obs['observed_at'])  # Now normalized and explicitly UTC
     ds = IRI(t, ALT_RANGE, obs['lat'], obs['lon'])
     alt, ne = extract_iri_profile(ds)
     metrics = diagnose(alt, ne)
@@ -154,7 +178,7 @@ def compare_station(IRI, obs):
 def fetch_stations(url=KC2G_URL):
     if url != KC2G_URL:
         raise ValueError('Only the documented KC2G public URL is supported')
-    req = urllib.request.Request(url, headers={'User-Agent': 'SWIFT-ION-v0.9-research/1.0 (noncommercial)'})
+    req = urllib.request.Request(url, headers={'User-Agent': 'SWIFT-ION-v0.9.1-research/1.0 (noncommercial)'})
     with urllib.request.urlopen(req, timeout=35) as res:
         content = res.read(5_000_001)
     if len(content) > 5_000_000:
@@ -163,17 +187,19 @@ def fetch_stations(url=KC2G_URL):
 
 
 def status_payload(now, status, message, raw_count=0, skipped=None):
-    return {'metadata': {'schema': 'swift-ion-ionosonde-v1',
+    return {'metadata': {'schema': 'swift-ion-ionosonde-v1.1',
             'generated_at': now.isoformat().replace('+00:00', 'Z'),
             'source': 'KC2G real-time station aggregate (GIRO / INGV derived)',
             'source_url': KC2G_URL,
             'original_providers': 'GIRO participating ionosonde operators / INGV as applicable',
-            'rules_url': GIRO_RULES, 'provider_acknowledgements_url': STATION_ACKNOWLEDGEMENTS,
+            'rules_url': GIRO_RULES,
+            'provider_acknowledgements_url': STATION_ACKNOWLEDGEMENTS,
             'license': 'GIRO-derived data: CC BY-NC-SA 4.0; noncommercial use only',
             'comparison': 'IRI climatology at ionosonde location and actual observation time',
             'is_forecast_skill': False, 'is_operational': False,
-            'hmf2_resolution_note': 'IRI model maxima are found on 25 km altitude samples (180-600 km); not an independently fitted hmF2 peak.',
-            'warning': 'Exploratory IRI-model vs best-available station-scaling discrepancy, not a validated density forecast. GIRO data may be autoscaled or manually scaled. Individual station/operator acknowledgement remains required.'},
+            'source_time_policy': 'KC2G timezone-naive ISO timestamps are interpreted as UTC; never apply to arbitrary feeds',
+            'hmf2_resolution_note': 'IRI model maxima sampled on 25km altitudes (180-600 km).',
+            'warning': 'Model-observation comparison, NOT forecast skill. GIRO data may be auto or manually scaled. Station operator credits required.'},
             'status': status, 'message': message, 'input_station_records': raw_count,
             'skipped': skipped or {}, 'sampled_stations': 0, 'evaluated_stations': 0,
             'metrics': {'fof2': error_stats([], 'MHz'), 'hmf2': error_stats([], 'km')},
@@ -183,12 +209,19 @@ def status_payload(now, status, message, raw_count=0, skipped=None):
 def evaluate(raw, now=None, max_stations=16, max_age_hours=6, min_confidence=70, iri_function=None):
     now = now or datetime.now(timezone.utc)
     base = status_payload(now, 'NO_USABLE_OBSERVATIONS', 'No fresh and usable station records')
+    base['schema_diagnostic'] = schema_diagnostic(raw)
     records, skipped = parse_stations(raw, now, max_age_hours, min_confidence)
     base['input_station_records'] = len(raw)
     base['skipped'] = skipped
     stations = global_sample(records, max_stations)
     base['sampled_stations'] = len(stations)
     if not stations:
+        if skipped.get('bad_shape') == len(raw) and raw:
+            base['status'] = 'SOURCE_SCHEMA_ERROR'
+            base['message'] = 'All station records failed structural checks; inspect schema_diagnostic'
+        elif skipped.get('bad_timestamp') == len(raw) and raw:
+            base['status'] = 'SOURCE_TIME_ERROR'
+            base['message'] = 'All station timestamps failed parsing; inspect schema_diagnostic'
         return base
     if iri_function is None:
         try:
@@ -230,8 +263,7 @@ def write_output(path, payload):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=Path, default=DEFAULT_OUTPUT)
-    parser.add_argument('--input', type=Path,
-                        help='Optional approved KC2G station JSON snapshot (for offline/diagnostics)')
+    parser.add_argument('--input', type=Path, help='Optional approved KC2G JSON snapshot for diagnostics')
     parser.add_argument('--max-stations', type=int, default=16)
     parser.add_argument('--max-age-hours', type=float, default=6)
     parser.add_argument('--min-confidence', type=float, default=70)
@@ -252,8 +284,11 @@ def main():
     write_output(args.output, result)
     print('Ionosonde comparison:', result['status'], '; observations:',
           result['evaluated_stations'], '; saved:', args.output, flush=True)
+    print('Rejected record counts:', result.get('skipped', {}), flush=True)
     if result['status'] != 'AVAILABLE':
         print('WARNING:', result['message'], flush=True)
+        if 'schema_diagnostic' in result:
+            print('SCHEMA_DIAGNOSTIC:', json.dumps(result['schema_diagnostic']), flush=True)
     return 0
 
 
