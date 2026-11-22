@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {windowFromForecast,missingClues} from '../docs/shared/fof2-window-diagnostics.mjs';
+const start=Date.parse('2026-11-21T12:00:00Z');
+const frames=Array.from({length:241},(_,i)=>({valid_at:new Date(start+i*1800_000).toISOString(),sites:[{lat:31.2,lon:130.62,scenario_status:i%2?'SCENARIO_AVAILABLE':'VTEC_PARTIAL_TEC_MISMATCH'}]}));
+const b=windowFromForecast(frames);
+assert.equal(b.max-b.min,96*3600_000);
+assert.equal(b.referenceEnd-b.min,24*3600_000);
+assert.equal(frames.filter(f=>Date.parse(f.valid_at)>=b.min&&Date.parse(f.valid_at)<=b.max).length,193);
+assert.equal(windowFromForecast(frames,'all').max-b.min,120*3600_000);
+assert.equal(windowFromForecast(frames,'48').max-windowFromForecast(frames,'48').min,48*3600_000);
+assert.throws(()=>windowFromForecast([{valid_at:'invalid'}]));
+const rows=frames.map((f,i)=>({station:'YAMAGAWA',ms:Date.parse(f.valid_at),model_mhz:i%3===0?null:7}));
+const d=missingClues(frames,rows,{id:'YAMAGAWA',lat:31.20,lon:130.62},b);
+assert.equal(d.total,193);assert.equal(d.missing,65);
+assert.equal(d.valid,128);assert.equal(d.breakdown.reduce((n,x)=>n+x.count,0),65);
+assert(d.counts.VTEC_PARTIAL_TEC_MISMATCH>0);
+assert.throws(()=>windowFromForecast(frames,'bad'));
+console.log('96h window + nearest-site diagnostics passed');
