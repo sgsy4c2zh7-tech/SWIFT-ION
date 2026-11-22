@@ -1,35 +1,24 @@
-# SWIFT-ION v2.2 — NICT 4-site foF2 research validation and training bridge
+# SWIFT-ION v2.2.1 — NICT / TEC skill test regression fix
 
-## Install
+## 原因
+v2.2 の `scripts/build_tec_skill.py` が、NICT観測所の固定座標で予報を抽出できなかった場合でも、その観測所名を登録済みとして確定していました。同名の後続観測所メタデータで再試行できず `NO_VALID_STATION_FORECASTS` となり、スナップショット/事後照合テストが連鎖して失敗しました。
 
-Copy `.github/`, `scripts/`, `docs/`, `tests/` and `nict_import/` from this ZIP into the SWIFT-ION repository root. Commit and Push using GitHub Desktop.
+## 修正
+予報発表時刻に存在するモデル値を少なくとも1件抽出できた場合だけ、観測所名と位置を登録確定します。固定NICT座標で値が取れない場合、後続の観測所座標メタデータに再試行できます。観測されたfoF2値を予報に使う変更ではありません。
 
-Commit Summary: `Add NICT four-station foF2 observation validation and training bridge`
+## 上書きするファイル
+- `scripts/build_tec_skill.py`（既存ファイルに上書き）
+- `tests/test_v221_station_fallback.py`（新規回帰テスト）
 
-## Operation and limits
+## GitHub Desktop
+1. ZIPを解凍し、このZIPの `scripts` と `tests` フォルダを、SWIFT-ION リポジトリの同名フォルダに上書きコピー。
+2. GitHub Desktop Summary に `Fix NICT station sampling regression in TEC skill tests` と入力。
+3. Commit to main → Push origin。
+4. GitHub Actions の `Run unit tests` の結果を確認。
 
-- Archives verified-format numerical CSV with 4 NICT site IDs, explicit UTC or JST (converted to UTC), foF2 in MHz, provenance. There are **NO synthetic observations in this patch**.
-- Evaluates only previously issued, archived snapshots against later NICT observations, matching ±15 minutes and within 15 km of official station coordinates; stores `nict_matches` and `nict_observations` in existing `swift-ion-history` 365-day branch.
-- NICT station coordinates are always included in newly issued `tec_outlooks` so an NICT validation sample can later be matched even when GIRO/KC2G lacks these stations.
-- Existing empirical / AI trainer uses only archived STANDARD-quality prospective matches and chronological holdout; future-observation leakage is prohibited.
-- Displays latest 7 days of imported NICT observations on `docs/nict_compare.html` and station-by-station accuracy at `docs/nict_skill.html`. If no data are available, the website says so explicitly.
-- Default frequency: GitHub Actions schedule; source import happens before learning the new model. GitHub Pages build is unchanged.
+## スコープ
+NICT実測CSVの取込、経験係数、AI学習、365日履歴、予報式、GitHub Pagesのワークフローは変更していません。
+以前の履歴を削除・初期化する処理もありません。
 
-**Important:** NICT's archive landing page does not expose a verified machine-readable download URL/format in our environment. This ZIP does NOT invent an API or claim unattended direct NICT downloads are already working. To ingest observations NOW, convert the numerical NICT export to the normalized format in `nict_import/README.md` and commit those CSV files. To enable scheduled downloads after verifying numerical URLs, add the GitHub Actions secret `NICT_AUTO_SOURCE_URLS` with a JSON mapping (examples of *structure only*):
-
-    {"WAKKANAI":"https://wdc.nict.go.jp/ACTUAL_VERIFIED_NUMERIC_FILE.csv"}
-
-This example is NOT a real download path and must not be used as is.
-
-Official source: https://wdc.nict.go.jp/Ionosphere/en/archive/isdj_auto_txt.html
-Attribution: WDC for Ionosphere and Space Weather, Tokyo, National Institute of Information and Communications Technology. The NICT data policy requires appropriate acknowledgement on publications; confirm data redistribution permissions before making auto-ingested raw data public. Automatically scaled parameters are preliminary and should be quality-screened before stronger claims.
-
-## Verify
-
-- `python -m unittest discover -s tests -p 'test_nict_bridge.py' -v`
-- GitHub Actions step `Ingest NICT four-station observations and score prior forecasts`
-- `docs/nict_fof2_status.json` (`AWAITING_NICT_NUMERIC_CSV` when none imported)
-- `docs/nict_fof2_4station.csv` (header-only when none imported)
-- `docs/nict_skill.html` for station scores.
-
-Existing IRI baseline and three-stage / TEC 365-day scores remain separate; source-mixed training rows carry source labels; no historical forecast backfilling is done.
+## 検証
+ローカル再現環境で `test_tec_skill.py` 12件、`test_nict_bridge.py` 8件、`test_fof2_extended.py` 9件、今回の新規回帰テスト2件に成功しました。GitHub Actions上での139件+2件の全テスト完了は、Push後に確認が必要です。

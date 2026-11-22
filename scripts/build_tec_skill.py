@@ -140,8 +140,12 @@ def build_snapshot(model, observations, now, max_stations=MAX_STATIONS):
             if any(distance_km((lat,lon),loc)<=15 for loc in visited_coordinates):continue
         except (ValueError, TypeError, KeyError):
             continue
-        visited_coordinates.append((lat,lon))
-        unique.add(name)
+        # Only reserve a station name and coordinates after at least one
+        # *published* forecast can actually be sampled. The fixed NICT station
+        # can lack spatial support in an issue (or be represented by older
+        # KC2G metadata nearby); in that case allow the later issue-time
+        # metadata candidate to be tried. No observed foF2 enters prediction.
+        candidate_forecasts=[]
         for h in HORIZONS_H:
             target = next_utc_hour(now+timedelta(hours=h))
             if target < now+timedelta(minutes=30): continue
@@ -149,10 +153,14 @@ def build_snapshot(model, observations, now, max_stations=MAX_STATIONS):
             if fr is None: continue
             sampled=sample_station(fr,lat,lon)
             if not sampled: continue
-            forecasts.append({'station':name,'lat':round(lat,5),'lon':round(lon,5),
+            candidate_forecasts.append({'station':name,'lat':round(lat,5),'lon':round(lon,5),
                   'valid_at':iso(target),'nominal_horizon_h':h,
                   'actual_lead_h':round((target-now).total_seconds()/3600,4),
                   **sampled})
+        if candidate_forecasts:
+            forecasts.extend(candidate_forecasts)
+            visited_coordinates.append((lat,lon))
+            unique.add(name)
     if not forecasts: return None, 'NO_VALID_STATION_FORECASTS'
     return {'metadata':{
         'schema':SCHEMA, 'issued_at':iso(now),'source_issued_at':iso(issued_model),
