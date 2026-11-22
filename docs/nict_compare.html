@@ -7,13 +7,13 @@ body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 system-ui,-appl
 <header><div style="color:#8fc4e0;font-size:11px;letter-spacing:.12em">SWIFT-ION / SCIENTIFIC VALIDATION</div><h1>NICT 4地点｜foF2予報・観測比較</h1><p>稚内・国分寺・山川・沖縄の4観測所について、SWIFT-IONの同一UTC時刻のfoF2予報を比較。NICT公開データの数値CSVを読み込むと観測値・誤差も重ね合わせます。</p><nav><a href="./index.html">← ホーム</a><a href="./field.html">foF2動画</a><a href="./route.html">飛行経路動画</a><a href="./route_excel.html">経路Excel分析</a><a href="https://wdc.nict.go.jp/Ionosphere/en/" target="_blank" rel="noopener">NICT公式観測ページ</a><a href="https://wdc.nict.go.jp/Ionosphere/en/archive/" target="_blank" rel="noopener">NICT数値アーカイブ</a></nav></header>
 <main class="wrap">
 <section class="controls">
- <label>予報の種類<select id="variant"><option value="iri">IRI基準</option><option value="tec">TEC連動シナリオ（実験）</option></select></label>
- <label>表示期間<select id="window"><option value="48">直近48時間（予報データ内）</option><option value="96">直近96時間（予報データ内）</option><option value="nict6" selected>NICT形式・6日間（UTC）</option><option value="all">予報全期間</option></select></label>
+ <label>表示するモデル<select id="variant"><option value="tec" selected>SWIFT-TEC連動 foF2（自動3段階補正）</option></select></label>
+ <label>表示期間<select id="window"><option value="all" selected>予報全期間（データの開始〜終了）</option><option value="48">直近48時間</option><option value="96">直近96時間</option></select></label>
  <label>横軸（UTC）補助線<select id="axisTick"><option value="3">3時間</option><option value="6" selected>6時間（NICT推奨）</option><option value="12">12時間</option><option value="24">24時間</option></select></label>
  <label>観測数値CSV<input id="csvFile" type="file" accept=".csv,text/csv"/></label>
  <button id="template">CSV雛形</button><button id="export" class="action">グラフ付きExcelに出力 (.xlsx)</button><button id="fullscreen">⛶ 全画面</button>
 </section>
-<div class="warn">重要：グラフの青線はSWIFT-IONのIRI由来の予報値で、NICTが観測した値ではありません。オレンジ色の観測線は、利用者が取り込んだCSVの値です。CSVが未読込の場合は「NICT観測：未取得」を明記します。観測時刻と予報時刻が一致しない場合は的中率を計算しません。NICT形式の横軸はUTCの6日間を表示しますが、現在の約5日間のSWIFT-ION予報の範囲外は空白です。</div>
+<div class="warn">紫線＝SWIFT-TEC連動foF2（物理推定 → 学習済み経験補正 → 検証済み機械学習補正のうち使用可能な最上位段階）。橙線＝取り込んだNICT観測CSV。学習が不足している場合は物理推定のみ。TEC補正不成立時は欠測で、IRI値に自動置換しません。グラフは公開済み予報の始点から終点だけを表示します。AIによる改善は予報発表後の観測で確認が必要です。</div>
 <div class="status" id="status">SWIFT-IONの予報JSONを読み込み中…</div>
 <section class="cards" id="summaries"></section>
 <section class="graphs" id="graphs"></section>
@@ -23,13 +23,12 @@ body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 system-ui,-appl
 </main>
 <script type="module">
 import {NICT_STATIONS,observationsFromCsv,extractForecast,matchForecast,stats} from './shared/nict-compare.mjs';
-import {downloadWorkbook} from './shared/xlsx-charts.mjs';import {drawAxisPlot,oneMhzBounds,sixDayUtcBounds} from './shared/axis-plots.mjs';
-const $=id=>document.getElementById(id),q={data:null,observations:[],warnings:[],forecast:[],matched:[]};const COL=['#79e1f3','#ffbe78'];
+import {downloadWorkbook} from './shared/xlsx-charts.mjs';import {drawAxisPlot,oneMhzBounds} from './shared/axis-plots.mjs';
+const $=id=>document.getElementById(id),q={data:null,observations:[],warnings:[],forecast:[],matched:[],iriForecast:[],tecForecast:[],baseMatched:[]};const COL=['#79e1f3','#c49aff','#ffbe78'];
 function windowRange(){
  const ts=q.data.frames.map(f=>Date.parse(f.valid_at)).filter(Number.isFinite);
  if(!ts.length)throw Error('Forecast timestamps missing');
  const first=ts[0],last=ts.at(-1),period=$('window').value;
- if(period==='nict6'){const r=sixDayUtcBounds(first);return {min:r.start,max:r.end,description:'NICT形式・UTC 6日間'};}
  if(period==='all')return {min:first,max:last,description:'予報全期間'};
  const hours=Number(period);return {min:Math.max(first,last-hours*3600000),max:last,description:`直近${hours}時間`};
 }
@@ -37,29 +36,33 @@ function sectionRows(station){
  const {min,max}=windowRange();return q.matched.filter(r=>r.station===station&&r.ms>=min&&r.ms<=max);
 }
 function f(n,d=2){return n===null||!Number.isFinite(n)?'—':n.toFixed(d)}
-function canvasPlot(canvas,rows,label){
+function canvasPlot(canvas,rows,label,station){
  const wr=windowRange(),tmin=wr.min,tmax=wr.max;
  const hours=Number($('axisTick').value),step=hours*3600000;
- const series=[
-   {name:'SWIFT-ION予報',color:COL[0],points:rows.map(r=>({x:r.ms,y:r.model_mhz}))},
-   {name:'NICT CSV観測',color:COL[1],points:rows.map(r=>({x:r.ms,y:r.observed_mhz}))}
- ];
+ const mode=$('variant').value;
+ const iri=new Map(q.iriForecast.filter(r=>r.station===station).map(r=>[r.ms,r.model_mhz]));
+ const tec=new Map(q.tecForecast.filter(r=>r.station===station).map(r=>[r.ms,r.model_mhz]));
+ const series=[];
+ 
+ series.push({name:'SWIFT-TEC連動 foF2',color:COL[1],points:rows.map(r=>({x:r.ms,y:tec.get(r.ms)??null}))});
+ series.push({name:'取込NICT観測',color:COL[2],points:rows.map(r=>({x:r.ms,y:r.observed_mhz}))});
  const y=oneMhzBounds(series.flatMap(s=>s.points.map(p=>p.y)));
  canvas.style.height=`${Math.max(335,(y.max-y.min)*28+103)}px`;
  drawAxisPlot(canvas,series,{kind:'time',timeStyle:'nict',xMin:tmin,xMax:tmax,step,
    yMin:y.min,yMax:y.max,yStep:1,title:label,valueUnit:'MHz'});
  return y;
 }
-function render(){if(!q.data)return;q.forecast=extractForecast(q.data,$('variant').value);q.matched=matchForecast(q.forecast,q.observations);
+function render(){if(!q.data)return;q.iriForecast=extractForecast(q.data,'iri');q.tecForecast=extractForecast(q.data,'tec');q.forecast=q.tecForecast;q.matched=matchForecast(q.forecast,q.observations);q.baseMatched=matchForecast(q.iriForecast,q.observations);
  $('graphs').innerHTML='';$('summaries').innerHTML='';$('body').innerHTML='';
  for(const st of NICT_STATIONS){const forecasts=q.forecast.filter(x=>x.station===st.id),observations=q.observations.filter(x=>x.station===st.id&&x.fof2_mhz!==null),rows=sectionRows(st.id),result=stats(q.matched.filter(x=>x.station===st.id));
   const card=document.createElement('div');card.className='card';const last=rows.filter(x=>x.model_mhz!==null).at(-1)?.model_mhz??null;card.innerHTML=`<b>${f(last)} <small>MHz</small></b><span>${st.name}｜最新予報foF2</span><br><span>${result.n ? '観測一致 '+result.n+'件｜MAE '+f(result.mae)+' MHz' : 'NICT観測との一致なし'}</span>`;$('summaries').appendChild(card);
-  const panel=document.createElement('div');panel.className='panel';const title=document.createElement('h2');title.textContent=st.name;panel.appendChild(title);const mt=document.createElement('div');mt.className='meta';mt.textContent=`${st.lat.toFixed(2)}°N, ${st.lon.toFixed(2)}°E | 予報 ${forecasts.filter(x=>x.model_mhz!==null).length}点 | 観測CSV ${observations.length}点`;panel.appendChild(mt);const lg=document.createElement('div');lg.className='legend';lg.innerHTML=`<span><i class="dot" style="background:${COL[0]}"></i>SWIFT-ION予報</span><span><i class="dot" style="background:${COL[1]}"></i>取り込み観測</span><span>${result.n?'誤差計算あり':'時刻一致データなし'}</span>`;panel.appendChild(lg);
-  const cv=document.createElement('canvas');panel.appendChild(cv);$('graphs').appendChild(panel);const yAxis=canvasPlot(cv,rows,'foF2 (MHz)');const axisNote=document.createElement('div');axisNote.className='meta';axisNote.textContent=`縦軸 ${yAxis.available?`${yAxis.min}～${yAxis.max} MHz`:'値なし'}（1 MHz刻み）｜${windowRange().description}｜横軸UTC`;panel.appendChild(axisNote);
+  const panel=document.createElement('div');panel.className='panel';const title=document.createElement('h2');title.textContent=st.name;panel.appendChild(title);const mt=document.createElement('div');mt.className='meta';mt.textContent=`${st.lat.toFixed(2)}°N, ${st.lon.toFixed(2)}°E | 予報 ${forecasts.filter(x=>x.model_mhz!==null).length}点 | 観測CSV ${observations.length}点`;panel.appendChild(mt);const lg=document.createElement('div');lg.className='legend';const tecN=q.tecForecast.filter(x=>x.station===st.id&&x.model_mhz!==null).length;lg.innerHTML=`<span><i class="dot" style="background:${COL[1]}"></i>SWIFT-TEC連動（有効 ${tecN}/${q.data.frames.length}）</span><span><i class="dot" style="background:${COL[2]}"></i>取り込みNICT観測</span><span>${result.n?'選択モデルの観測一致 '+result.n+'件':'時刻一致データなし'}</span>`;panel.appendChild(lg);
+  const cv=document.createElement('canvas');panel.appendChild(cv);$('graphs').appendChild(panel);const yAxis=canvasPlot(cv,rows,'foF2 (MHz)',st.id);const axisNote=document.createElement('div');axisNote.className='meta';axisNote.textContent=`縦軸 ${yAxis.available?`${yAxis.min}～${yAxis.max} MHz`:'値なし'}（1 MHz刻み）｜${windowRange().description}｜横軸UTC`;panel.appendChild(axisNote);
   const tr=document.createElement('tr');tr.innerHTML=`<td>${st.name}</td><td>${st.lat.toFixed(2)}, ${st.lon.toFixed(2)}</td><td>${forecasts.filter(x=>x.model_mhz!==null).length}</td><td>${observations.length}</td><td>${result.n}</td><td>${f(result.mae)}</td><td>${f(result.bias)}</td>`;$('body').appendChild(tr);
  }
  const obsTotal=q.observations.filter(x=>x.fof2_mhz!==null).length;const nMatched=q.matched.filter(x=>x.error_mhz!==null).length;const issued=q.data.metadata?.issued_at||'—';
- $('status').textContent=`予報: ${q.data.frames.length}フレーム (30分) ・発表 ${issued} ・モデル ${$('variant').value==='iri'?'IRI基準':'TEC連動実験シナリオ'}\n横軸: ${windowRange().description}・縦軸: 表示期間内の最小～最大を1 MHz刻み。予報未公開時刻は空白。\n観測CSV: ${obsTotal}件（出典は利用者入力）・時刻一致: ${nMatched}件（±15分）${q.warnings.length?' ・ 読込警告: '+q.warnings.slice(0,3).join(' / '):''}`;
+ const tecCount=q.tecForecast.filter(x=>x.model_mhz!==null).length;const baselineCount=q.iriForecast.filter(x=>x.model_mhz!==null).length;
+ $('status').textContent=`予報: ${q.data.frames.length}フレーム (30分) ・発表 ${issued} ・表示 TEC連動foF2 (${q.data.metadata?.fof2_calibration_status||'PHYSICS_ONLY'})\n横軸: ${windowRange().description}（開始〜終了）・縦軸: 表示期間内の最小～最大を1 MHz刻み。TEC連動有効地点時刻 ${tecCount}/${baselineCount}（4地点合計）。\n観測CSV: ${obsTotal}件（出典は利用者入力）・選択モデルの時刻一致: ${nMatched}件（±15分）。NICTとの照合はTEC連動モデルのみ。${q.warnings.length?' ・ 読込警告: '+q.warnings.slice(0,3).join(' / '):''}`;
 }
 async function init(){try{const r=await fetch('./ion_forecast.json',{cache:'no-store'});if(!r.ok)throw Error('ion_forecast.json HTTP '+r.status);q.data=await r.json();if(q.data.schema!=='swift-ion-iri-tec-forecast-v1'||!q.data.frames?.length)throw Error(q.data.status||'予報が未生成');render();}catch(e){$('status').textContent='予報を読み込めません: '+e.message;}}
 $('variant').onchange=render;$('window').onchange=render;$('axisTick').onchange=render;window.addEventListener('resize',()=>{if(q.data)render()});
@@ -68,15 +71,18 @@ $('template').onclick=()=>{const t='station,time_utc,fof2_mhz,source\nWAKKANAI,,
 $('export').onclick=()=>{try{if(!q.data)throw Error('予報がまだありません');const statsRows=NICT_STATIONS.map(st=>{const a=q.forecast.filter(x=>x.station===st.id),b=q.observations.filter(x=>x.station===st.id&&x.fof2_mhz!==null),s=stats(q.matched.filter(x=>x.station===st.id));return [st.id,st.name,st.lat,st.lon,a.filter(x=>x.model_mhz!==null).length,b.length,s.n,s.mae,s.rmse,s.bias]});
  const sheets=[{name:'Summary',rows:[['Station ID','NICT観測所','Lat','Lon','Forecast N','Imported observed N','Matched N','MAE MHz','RMSE MHz','Bias MHz'],...statsRows]},
  {name:'Forecast_30min',rows:[['Station','Station name','Valid UTC','foF2 Model MHz','Variant','Issued UTC','Prospective'],...q.forecast.map(x=>[x.station,x.station_name,x.time_utc,x.model_mhz,x.variant,q.data.metadata?.issued_at||'',x.is_prospective?'Yes':'No'])]},
- {name:'foF2_Charts',rows:[['Elapsed h',...NICT_STATIONS.map(s=>s.id+' Forecast MHz'),...NICT_STATIONS.map(s=>s.id+' Observed MHz')],
+ {name:'IRI_vs_TEC_30min',rows:[['Station','Valid UTC','IRI baseline foF2 MHz','TEC linked foF2 MHz','TEC minus IRI MHz','TEC linked availability','Model issued UTC'],...q.iriForecast.map((f,i)=>{const tec=q.tecForecast[i]?.model_mhz??null;return [f.station,f.time_utc,f.model_mhz,tec,Number.isFinite(tec)&&Number.isFinite(f.model_mhz)?+(tec-f.model_mhz).toFixed(3):null,Number.isFinite(tec)?'AVAILABLE':'UNAVAILABLE',q.data.metadata?.issued_at||'']})]},
+
+ {name:'foF2_Charts',rows:[['Elapsed h',...NICT_STATIONS.map(s=>s.id+' IRI MHz'),...NICT_STATIONS.map(s=>s.id+' TEC MHz'),...NICT_STATIONS.map(s=>s.id+' Observed MHz')],
  ...q.data.frames.map((frame,i)=>{
   const t=Date.parse(frame.valid_at),t0=Date.parse(q.data.frames[0].valid_at);
-  return [(t-t0)/3600000,...NICT_STATIONS.map(st=>q.matched.find(x=>x.station===st.id&&x.ms===t)?.model_mhz??null),
-    ...NICT_STATIONS.map(st=>q.matched.find(x=>x.station===st.id&&x.ms===t)?.observed_mhz??null)];
- })],charts:NICT_STATIONS.map((st,i)=>({title:st.name+' foF2 forecast / NICT observed',xCol:0,yCols:[i+1,i+5],seriesNames:['SWIFT-ION forecast','Imported NICT observation'],xTitle:'Elapsed hours',yTitle:'foF2 MHz',anchorCol:11,anchorRow:1+i*21,endCol:23,endRow:19+i*21,labelStride:12}))},
+  return [(t-t0)/3600000,...NICT_STATIONS.map(st=>q.iriForecast.find(x=>x.station===st.id&&x.ms===t)?.model_mhz??null),
+    ...NICT_STATIONS.map(st=>q.tecForecast.find(x=>x.station===st.id&&x.ms===t)?.model_mhz??null),
+    ...NICT_STATIONS.map(st=>q.baseMatched.find(x=>x.station===st.id&&x.ms===t)?.observed_mhz??null)];
+ })],charts:NICT_STATIONS.map((st,i)=>({title:st.name+' foF2 IRI / TEC / imported NICT',xCol:0,yCols:[i+1,i+5,i+9],seriesNames:['IRI baseline','SWIFT-TEC linked scenario','Imported NICT observation'],xTitle:'Elapsed hours',yTitle:'foF2 MHz',anchorCol:14,anchorRow:1+i*21,endCol:26,endRow:19+i*21,labelStride:12}))},
  {name:'Imported_NICT_Obs',rows:[['Station','Observed UTC','foF2 MHz','Source (user supplied)'],...q.observations.map(x=>[x.station,x.time_utc,x.fof2_mhz,x.source])]},
  {name:'Matched_15min',rows:[['Station','Forecast UTC','Model MHz','Obs UTC','Observed MHz','Error MHz','Source'],...q.matched.filter(x=>x.observed_mhz!==null).map(x=>[x.station,x.time_utc,x.model_mhz,x.obs_utc,x.observed_mhz,x.error_mhz,x.observation_source])]},
- {name:'Sources_and_Notes',rows:[['Item','Description'],['NICT official station coordinates','https://wdc.nict.go.jp/Ionosphere/en/conditions/04.html'],['NICT observations','https://wdc.nict.go.jp/Ionosphere/en/archive/'],['NICT stations','WAKKANAI, KOKUBUNJI, YAMAGAWA, OKINAWA'],['Observation origin','CSV uploaded by user; NOT independently verified NICT API'],['Model','SWIFT-ION IRI / experimental TEC-linked foF2'],['Model issue',q.data.metadata?.issued_at||''],['Matching rule','Nearest observation within ±15 minutes; may be missing'],['Missing data','Empty cell. Never imputed.'],['Validation','This workbook is NOT a validated prospective forecast skill report'],['foF2 units','MHz'],['TEC comparison','NICT TEC 37°N and station foF2 are distinct products']]}];
+ {name:'Sources_and_Notes',rows:[['Item','Description'],['NICT official station coordinates','https://wdc.nict.go.jp/Ionosphere/en/conditions/04.html'],['NICT observations','https://wdc.nict.go.jp/Ionosphere/en/archive/'],['NICT stations','WAKKANAI, KOKUBUNJI, YAMAGAWA, OKINAWA'],['Observation origin','CSV uploaded by user; NOT independently verified NICT API'],['Model','SWIFT-ION IRI / experimental TEC-linked foF2'],['Model issue',q.data.metadata?.issued_at||''],['Matching rule','Nearest observation within ±15 minutes; may be missing'],['Display period','Exactly first to last published 30-minute forecast frame'],['TEC linked','Physics baseline is bounded Ne profile scaling; empirical/AI residuals are applied only after chronologically held-out MAE improvement'],['Default chart','TEC-linked selected foF2 only, plus imported NICT observation if provided'],['Comparison default skill','Summary statistics in compare mode are selected TEC-linked forecast; three-stage prospective skill is on year.html'],['Missing data','Empty cell. Never imputed.'],['Validation','This workbook is NOT a validated prospective forecast skill report'],['foF2 units','MHz'],['TEC comparison','NICT TEC 37°N and station foF2 are distinct products']]}];
  downloadWorkbook('SWIFT-ION_NICT_4station_foF2.xlsx',sheets)}catch(e){$('status').textContent='Excel出力失敗: '+e.message}};
 $('fullscreen').onclick=async()=>{try{document.fullscreenElement?await document.exitFullscreen():await document.documentElement.requestFullscreen()}catch(e){$('status').textContent='全画面表示: '+e.message}};
 init();

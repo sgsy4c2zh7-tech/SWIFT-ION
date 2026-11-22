@@ -16,6 +16,8 @@ import json
 import math
 from pathlib import Path
 import sys
+from fof2_ml import stage_predict, SCHEMA as CALIBRATION_SCHEMA
+from build_fof2_drivers import drivers_at
 
 ROOT = Path(__file__).resolve().parents[1]
 PROFILE_ALTITUDES = list(range(100, 2001, 25))
@@ -248,7 +250,8 @@ def status_payload(now, status, reason, index=None):
 
 
 def build(animation_dir, ionosphere, output, *, now=None, iri_provider=None,
-          max_sites=120, anchor_hours=6, japan_sites=40, global_anchor_hours=12):
+          max_sites=120, anchor_hours=6, japan_sites=40, global_anchor_hours=12,
+          calibration=None, drivers=None):
     now=now or datetime.now(timezone.utc)
     if now.tzinfo is None:raise ValueError('Run time must have timezone')
     base=Path(animation_dir)
@@ -304,7 +307,24 @@ def build(animation_dir, ionosphere, output, *, now=None, iri_provider=None,
             forecast_cells.append(arr)
         required_frame+=c['count']
     if len(forecast_cells)!=len(ts):raise ValueError('Animation time/frames mismatch')
+    # Calibration and drivers are strictly issue-time inputs. Failed or absent
+    # inputs are neutral; do not invent measurements or use future labels.
+    calibration_model = None
+    driver_payload = None
+    if calibration and Path(calibration).is_file():
+        try:
+            obj=json.loads(Path(calibration).read_text(encoding='utf-8'))
+            if obj.get('schema')==CALIBRATION_SCHEMA and utc(obj['trained_at']) <= now:
+                calibration_model=obj
+        except (ValueError,KeyError,TypeError):pass
+    if drivers and Path(drivers).is_file():
+        try:
+            obj=json.loads(Path(drivers).read_text(encoding='utf-8'))
+            if obj.get('schema')=='swift-ion-fof2-driver-v1' and utc(obj['fetched_at']) <= now:
+                driver_payload=obj
+        except (ValueError,KeyError,TypeError):pass
     result=[];scenario_pairs=0
+    stages={'PHYSICS':0,'EMPIRICAL':0,'AI':0,'UNAVAILABLE':0}
     for t_index,t in enumerate(ts):
         cells=[]
         for idx_site in site_indices:
@@ -318,9 +338,19 @@ def build(animation_dir, ionosphere, output, *, now=None, iri_provider=None,
             base_log=[round(math.log10(max(1,n)),4) if n is not None else None for n in disp]
             scen_log=[round(math.log10(max(1,n*factor)),4) if n is not None else None for n in disp] if factor is not None else [None]*len(disp)
             if factor is not None:scenario_pairs+=1
+            kp,f107=drivers_at(driver_payload,t,now) if driver_payload else (None,None)
+            physics=pk['fof2_mhz']*math.sqrt(factor) if factor is not None else None
+            calibrated=stage_predict(physics,pk['fof2_mhz'],lat,lon,t,kp,f107,calibration_model)
+            stages[calibrated['stage']]+=1
             cells.append({'lat':lat,'lon':lon,'method':'IRI_FUTURE_ANCHOR_TEMPORAL_INTERPOLATION',
                 'ne_log10_m3':base_log,'iri_ne_log10_m3':base_log,'tec_ne_log10_m3':scen_log,
-                'fof2_iri_mhz':round(pk['fof2_mhz'],3),'fof2_tec_mhz':round(pk['fof2_mhz']*math.sqrt(factor),3) if factor else None,
+                'fof2_iri_mhz':round(pk['fof2_mhz'],3),
+                'fof2_tec_mhz':calibrated['selected'],
+                'fof2_physics_mhz':calibrated['physics'],
+                'fof2_empirical_mhz':calibrated['empirical'],
+                'fof2_ai_mhz':calibrated['ai'],
+                'fof2_stage_used':calibrated['stage'],
+                'kp_forecast':kp,'f107_available':f107,
                 'hmf2_iri_km':round(pk['hmf2_km'],1),'hmf2_tec_km':round(pk['hmf2_km'],1) if factor else None,
                 'vtec_forecast_tecu':round(vtec,3) if vtec is not None else None,
                 'iri_partial_tec_100_2000_tecu':round(partial,3) if partial is not None else None,
@@ -348,6 +378,11 @@ def build(animation_dir, ionosphere, output, *, now=None, iri_provider=None,
           'minimum_valid_sites_required':minimum_valid,
           'map_resolution_note':'Spatial interpolation does not increase physical IRI information.',
           'iri_valid_sites':len(anchors),'tec_scenario_site_frames':scenario_pairs,
+          'fof2_calibration_schema':CALIBRATION_SCHEMA,
+          'fof2_calibration_status':calibration_model.get('status') if calibration_model else 'PHYSICS_ONLY',
+          'fof2_selected_stage_counts':stages,
+          'f107_is_observed_persistence_not_forecast':True,
+          'fof2_postprocessing_not_self_consistent_3d_density':True,
           'time_step_minutes':30,'htop_partial_tec_km':2000,
           'fof2_definition':'foF2 = 8.98 sqrt(NmF2[m-3]) / 1e6 MHz',
           'hmf2_is_iri_only':True,'is_forecast_skill':False,
@@ -356,6 +391,9 @@ def build(animation_dir, ionosphere, output, *, now=None, iri_provider=None,
             'SWIFT-TEC full VTEC vs IRI 100-2000km partial TEC have different column definitions.',
             'TEC-linked density and foF2 scenarios require bounded factor [0.5,2.0] and nontruncated IRI topside.',
             'hmF2 is IRI baseline only, unchanged by uniform TEC scaling.',
+            'Empirical and nonlinear ridge AI corrections are activated ONLY after chrono holdout improvement; may initially be inactive.',
+            'foF2 statistical postprocessing does not modify Ne(h), hmF2 or a self-consistent ionosphere profile.',
+            'Observed F10.7 is a persistence proxy, not a future forecast. Missing Kp/F10.7 features are neutral.',
             'No prospective skill estimate until independently validated by later ionosonde observations.',
             'Frames at or before issuance are retrospective model replay, not prospective forecasts.']},
          'sites':[{'lat':locs[i][0],'lon':locs[i][1]} for i in site_indices],
@@ -382,9 +420,12 @@ def main():
     ap.add_argument('--japan-sites',type=int,default=40)
     ap.add_argument('--anchor-hours',type=float,default=6)
     ap.add_argument('--global-anchor-hours',type=float,default=12)
+    ap.add_argument('--calibration',type=Path,default=ROOT/'docs/fof2_calibration.json')
+    ap.add_argument('--drivers',type=Path,default=ROOT/'docs/fof2_drivers.json')
     a=ap.parse_args()
     try:build(a.animation,a.ionosphere,a.output,max_sites=a.max_sites,anchor_hours=a.anchor_hours,
-              japan_sites=min(a.japan_sites,a.max_sites),global_anchor_hours=a.global_anchor_hours)
+              japan_sites=min(a.japan_sites,a.max_sites),global_anchor_hours=a.global_anchor_hours,
+              calibration=a.calibration,drivers=a.drivers)
     except (OSError,ValueError,KeyError,TypeError,ImportError) as exc:
         # If the OPTIONAL model cannot run, preserve every established operation.
         print('WARNING: experimental ionosphere forecast unavailable:',str(exc),file=sys.stderr)

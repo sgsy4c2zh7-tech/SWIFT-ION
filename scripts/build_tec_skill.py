@@ -85,8 +85,21 @@ def sample_station(frame, lat, lon):
     linked = aggregate('fof2_tec_mhz', require_all=True)
     if baseline is None or not (0 < baseline <= 35):
         return None
+    # Each published stage is sampled from the SAME neighboring issued sites.
+    # Incomplete empirical/AI support remains missing, not a false zero value.
+    physical=aggregate('fof2_physics_mhz',require_all=True)
+    empirical=aggregate('fof2_empirical_mhz',require_all=True)
+    ai=aggregate('fof2_ai_mhz',require_all=True)
+    def driver(key,hi):
+        vals=[c.get(key) for _,c in rows]
+        return round(sum(vals)/len(vals),3) if vals and all(valid_number(v) and 0<=v<=hi for v in vals) else None
     return {'predicted_fof2_iri_mhz':round(baseline,4),
             'predicted_fof2_tec_mhz':round(linked,4) if linked is not None and 0<linked<=35 else None,
+            'predicted_fof2_physics_mhz':round(physical,4) if physical is not None and physical>0 else None,
+            'predicted_fof2_empirical_mhz':round(empirical,4) if empirical is not None and empirical>0 else None,
+            'predicted_fof2_ai_mhz':round(ai,4) if ai is not None and ai>0 else None,
+            'kp_forecast':driver('kp_forecast',9),
+            'f107_available':driver('f107_available',400),
             'nearest_model_site_km':round(rows[0][0],2),
             'model_sites_used':len(rows), 'sampling':'SPATIAL_IDW_OF_SAME_ISSUE_MODEL_SITES'}
 
@@ -178,6 +191,11 @@ def score_observations(observations, snapshots, now):
                      'confidence':obs['confidence'],'observed_fof2_mhz':observed,
                      'predicted_fof2_iri_mhz':f.get('predicted_fof2_iri_mhz'),
                      'predicted_fof2_tec_mhz':f.get('predicted_fof2_tec_mhz'),
+                     'predicted_fof2_physics_mhz':f.get('predicted_fof2_physics_mhz'),
+                     'predicted_fof2_empirical_mhz':f.get('predicted_fof2_empirical_mhz'),
+                     'predicted_fof2_ai_mhz':f.get('predicted_fof2_ai_mhz'),
+                     'kp_forecast':f.get('kp_forecast'),
+                     'f107_available':f.get('f107_available'),
                      'nearest_model_site_km':f.get('nearest_model_site_km'),
                      'source_issued_at':snapshot['metadata']['source_issued_at']}
                 key=(name,iso(target),h)

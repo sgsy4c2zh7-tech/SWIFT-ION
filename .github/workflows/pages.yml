@@ -96,6 +96,36 @@ jobs:
           print('Explorer:',d['japan']['status'],'Japan frames=',len(d['japan']['frames']))
           PY
 
+      # Keep existing 365-day Git archive intact; read only prior observed matches
+      # before issuing current model. No future observation enters calibration.
+      - name: Prepare rolling-year archive branch
+        shell: bash
+        run: |
+          if git ls-remote --exit-code --heads origin swift-ion-history >/dev/null 2>&1; then
+            git fetch --no-tags origin refs/heads/swift-ion-history:refs/remotes/origin/swift-ion-history
+            git worktree add -b swift-ion-history _swift_ion_history origin/swift-ion-history
+          else
+            git worktree add --orphan -b swift-ion-history _swift_ion_history
+          fi
+
+
+      - name: Read NOAA Kp forecast and observed F10.7 for optional foF2 predictors
+        run: python scripts/build_fof2_drivers.py --out docs/fof2_drivers.json
+
+      - name: Train leakage-safe empirical and nonlinear ML foF2 calibration
+        run: |
+          python scripts/train_fof2_calibration.py \
+            --history _swift_ion_history \
+            --output docs/fof2_calibration.json
+          python - <<'PYTEST'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('docs/fof2_calibration.json').read_text(encoding='utf-8'))
+          assert d['schema']=='swift-ion-fof2-calibration-v1'
+          assert d['future_observations_used'] is False
+          print('foF2 stage availability:',d['status'],'past observations:',d['training_rows'])
+          PYTEST
+
       # Experimental coupling: prospective IRI climatology + SWIFT-TEC 30-minute VTEC.
       # Does not touch original SWIFT-TEC, NOAA, ISEE, 365-day validation or artifacts.
       - name: Build 30-minute ionosphere forecast cinema
@@ -107,7 +137,9 @@ jobs:
             --max-sites 120 \
             --japan-sites 40 \
             --anchor-hours 6 \
-            --global-anchor-hours 12
+            --global-anchor-hours 12 \
+            --calibration docs/fof2_calibration.json \
+            --drivers docs/fof2_drivers.json
           python - <<'PYTEST'
           import json
           from pathlib import Path
@@ -170,15 +202,6 @@ jobs:
           print('Ionosonde status:', d['status'], 'matched:', d['evaluated_stations'])
           PY
 
-      - name: Prepare rolling-year archive branch
-        shell: bash
-        run: |
-          if git ls-remote --exit-code --heads origin swift-ion-history >/dev/null 2>&1; then
-            git fetch --no-tags origin refs/heads/swift-ion-history:refs/remotes/origin/swift-ion-history
-            git worktree add -b swift-ion-history _swift_ion_history origin/swift-ion-history
-          else
-            git worktree add --orphan -b swift-ion-history _swift_ion_history
-          fi
 
       - name: Record prospective IRI forecasts and score a rolling 365 days
         run: |
@@ -217,6 +240,20 @@ jobs:
           print('TEC-linked paired foF2 skill:',t['status'],t['total_matches'],'matches')
           PY
 
+      - name: Evaluate physics empirical and AI foF2 stages prospectively (365 days)
+        run: |
+          python scripts/build_fof2_stage_skill.py \
+            --history _swift_ion_history \
+            --docs docs
+          python - <<'PYTEST'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('docs/fof2_stage_skill.json').read_text(encoding='utf-8'))
+          assert d['schema']=='swift-ion-fof2-three-stage-skill-v1'
+          assert d['metadata']['predeployment_backfill'] is False
+          print('3-stage foF2 skill:',d['status'],'matched:',d['total_matches'])
+          PYTEST
+
       - name: Commit 365-day history to dedicated branch
         shell: bash
         run: |
@@ -244,6 +281,11 @@ jobs:
             docs/tec_skill.json
             docs/tec_skill_daily.csv
             docs/tec_skill_monthly.csv
+            docs/fof2_stage_skill.json
+            docs/fof2_stage_daily.csv
+            docs/fof2_stage_monthly.csv
+            docs/fof2_calibration.json
+            docs/fof2_drivers.json
             docs/space_weather.json
             docs/density_slices.json
             docs/explorer_data.json
