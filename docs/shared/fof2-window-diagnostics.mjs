@@ -35,6 +35,10 @@ const STATUS_LABELS = Object.freeze({
   VTEC_MISSING:'VTEC欠測・IRI部分TEC不成立',
   IRI_PEAK_UNAVAILABLE:'IRIのF2ピーク推定不可',
   SCENARIO_AVAILABLE:'周辺値の欠落／空間補間の制約',
+  EXTENDED_RATIO_LOW:'低信頼・低TEC比の拡張推定',
+  EXTENDED_RATIO_HIGH:'低信頼・高TEC比の拡張推定',
+  EXTENDED_RATIO_TOPSIDE:'低信頼・TEC比とIRI上端の制約',
+  EXTENDED_TOPSIDE:'低信頼・IRI上端の制約',
   NO_MODEL_SITE:'近傍計算点なし',
   UNKNOWN:'未分類'
 });
@@ -69,4 +73,25 @@ export function missingClues(frames, forecastRows, station, bounds) {
   }
   return {total,valid,missing,counts,
     breakdown:Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([code,count])=>({code,count,label:STATUS_LABELS[code]}))};
+}
+
+/** Indicative nearest-site quality per frame. Not exact station IDW quality. */
+export function qualityClues(frames,station,bounds){
+  const out={standard:0,extended:0,missing:0,total:0};
+  for(const frame of frames){
+    const t=Date.parse(frame.valid_at);
+    if(!Number.isFinite(t)||t<bounds.min||t>bounds.max)continue;
+    out.total++;
+    let best=null,dMin=Infinity;
+    for(const site of frame.sites||[]){
+      if(!Number.isFinite(site.lat)||!Number.isFinite(site.lon))continue;
+      const d=sphereDistanceKm(station.lat,station.lon,site.lat,site.lon);
+      if(d<dMin){dMin=d;best=site;}
+    }
+    const quality=best?.fof2_quality;
+    if(quality==='EXTENDED')out.extended++;
+    else if(quality==='STANDARD'||(!quality&&best?.scenario_status==='SCENARIO_AVAILABLE'))out.standard++;
+    else out.missing++;
+  }
+  return out;
 }

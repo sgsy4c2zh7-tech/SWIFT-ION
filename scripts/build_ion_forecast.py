@@ -238,6 +238,41 @@ def scenario(ne, tec):
     return f,'SCENARIO_AVAILABLE',partial
 
 
+def extended_scenario(ne, tec):
+    """Quality-tagged, conservative continuation when strict ratio fails.
+
+    STANDARD values exactly preserve the original bounded physics rule.
+    EXTENDED is a low-confidence *sensitivity estimate* (not validated or a
+    measured foF2). It is never used to certify a strict match or train ML.
+    Cannot fabricate missing input VTEC or IRI F2 peak.
+    """
+    f, reason, partial = scenario(ne, tec)
+    if f is not None:
+        return f, 'SCENARIO_AVAILABLE', partial, 'STANDARD'
+    if reason not in ('VTEC_PARTIAL_TEC_MISMATCH', 'TOPSIDE_TRUNCATION'):
+        return None, reason, partial, 'MISSING'
+    if finite(tec, 0.001, 1000) is None or not partial or partial <= 0:
+        return None, 'VTEC_MISSING', partial, 'MISSING'
+    ratio = float(tec)/partial
+    if not math.isfinite(ratio) or ratio <= 0:
+        return None, 'VTEC_MISSING', partial, 'MISSING'
+    # C1-continuous low-gain saturation beyond the strict [.5, 2] window.
+    # Lower branch approaches .35, upper branch approaches 2.5, rather than
+    # deriving extreme foF2 from mismatched (VTEC vs IRI partial) columns.
+    if ratio < 0.5:
+        factor = .35 + .15 * math.exp(-(0.5-ratio)/.15)
+        status = 'EXTENDED_RATIO_LOW'
+    elif ratio > 2:
+        factor = 2 + .5 * (1-math.exp(-(ratio-2)/.5))
+        status = 'EXTENDED_RATIO_HIGH'
+    else:
+        factor = ratio
+        status = 'EXTENDED_TOPSIDE'
+    if reason == 'TOPSIDE_TRUNCATION' and status != 'EXTENDED_TOPSIDE':
+        status = 'EXTENDED_RATIO_TOPSIDE'
+    return factor, status, partial, 'EXTENDED'
+
+
 def status_payload(now, status, reason, index=None):
     return {'schema':SCHEMA,'metadata':{'generated_at':iso(now),
              'issued_at':iso(now),'status':status,
@@ -325,6 +360,7 @@ def build(animation_dir, ionosphere, output, *, now=None, iri_provider=None,
         except (ValueError,KeyError,TypeError):pass
     result=[];scenario_pairs=0
     stages={'PHYSICS':0,'EMPIRICAL':0,'AI':0,'UNAVAILABLE':0}
+    quality_counts={'STANDARD':0,'EXTENDED':0,'MISSING':0}
     for t_index,t in enumerate(ts):
         cells=[]
         for idx_site in site_indices:
@@ -333,19 +369,28 @@ def build(animation_dir, ionosphere, output, *, now=None, iri_provider=None,
             ne=interpolate_anchors(t_index,entry["indexes"],entry["pairs"]);pk=f2_peak(ne)
             if pk is None:continue
             vtec=bilinear_vtec(forecast_cells[t_index],lats,lons,lat,lon)
-            factor,sc_status,partial=scenario(ne,vtec)
+            strict_factor,strict_status,_=scenario(ne,vtec)
+            factor,sc_status,partial,quality=extended_scenario(ne,vtec)
+            quality_counts[quality] += 1
             disp=[interp_alt(PROFILE_ALTITUDES,ne,h) for h in DISPLAY_ALTITUDES]
             base_log=[round(math.log10(max(1,n)),4) if n is not None else None for n in disp]
             scen_log=[round(math.log10(max(1,n*factor)),4) if n is not None else None for n in disp] if factor is not None else [None]*len(disp)
             if factor is not None:scenario_pairs+=1
             kp,f107=drivers_at(driver_payload,t,now) if driver_payload else (None,None)
             physics=pk['fof2_mhz']*math.sqrt(factor) if factor is not None else None
-            calibrated=stage_predict(physics,pk['fof2_mhz'],lat,lon,t,kp,f107,calibration_model)
+            # ML coefficients are calibrated on STANDARD pairs only; never
+            # extrapolate their learned correction to EXTENDED quality sites.
+            eligible_calibration=calibration_model if quality=='STANDARD' else None
+            calibrated=stage_predict(physics,pk['fof2_mhz'],lat,lon,t,kp,f107,eligible_calibration)
             stages[calibrated['stage']]+=1
             cells.append({'lat':lat,'lon':lon,'method':'IRI_FUTURE_ANCHOR_TEMPORAL_INTERPOLATION',
                 'ne_log10_m3':base_log,'iri_ne_log10_m3':base_log,'tec_ne_log10_m3':scen_log,
                 'fof2_iri_mhz':round(pk['fof2_mhz'],3),
                 'fof2_tec_mhz':calibrated['selected'],
+                'fof2_strict_mhz':round(pk['fof2_mhz']*math.sqrt(strict_factor),3) if strict_factor is not None else None,
+                'fof2_quality':quality,
+                'fof2_raw_vtec_ratio':round(vtec/partial,5) if (partial and vtec is not None) else None,
+                'fof2_strict_failure':strict_status if strict_factor is None else None,
                 'fof2_physics_mhz':calibrated['physics'],
                 'fof2_empirical_mhz':calibrated['empirical'],
                 'fof2_ai_mhz':calibrated['ai'],
@@ -381,6 +426,9 @@ def build(animation_dir, ionosphere, output, *, now=None, iri_provider=None,
           'fof2_calibration_schema':CALIBRATION_SCHEMA,
           'fof2_calibration_status':calibration_model.get('status') if calibration_model else 'PHYSICS_ONLY',
           'fof2_selected_stage_counts':stages,
+          'fof2_quality_counts':quality_counts,
+          'fof2_extended_is_validated':False,
+          'fof2_extended_method':'Smooth bounded continuation [0.35,2.5] of raw SWIFT-TEC VTEC / IRI 100-2000 km partial TEC ratio; research sensitivity only',
           'f107_is_observed_persistence_not_forecast':True,
           'fof2_postprocessing_not_self_consistent_3d_density':True,
           'time_step_minutes':30,'htop_partial_tec_km':2000,
@@ -394,6 +442,8 @@ def build(animation_dir, ionosphere, output, *, now=None, iri_provider=None,
             'Empirical and nonlinear ridge AI corrections are activated ONLY after chrono holdout improvement; may initially be inactive.',
             'foF2 statistical postprocessing does not modify Ne(h), hmF2 or a self-consistent ionosphere profile.',
             'Observed F10.7 is a persistence proxy, not a future forecast. Missing Kp/F10.7 features are neutral.',
+            'EXTENDED foF2 is a LOW-CONFIDENCE provisional estimate when strict VTEC / IRI partial-TEC ratio or IRI topside criteria fail. Never treat smoother display as better accuracy.',
+            'Empirical/AI corrections are intentionally disabled on EXTENDED model cells; only STANDARD prospective pairs are eligible for ML training.',
             'No prospective skill estimate until independently validated by later ionosonde observations.',
             'Frames at or before issuance are retrospective model replay, not prospective forecasts.']},
          'sites':[{'lat':locs[i][0],'lon':locs[i][1]} for i in site_indices],

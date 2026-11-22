@@ -1,31 +1,64 @@
-# SWIFT-ION v2.1.1 — SWIFT-TEC 96h foF2表示と欠測診断
+# SWIFT-ION v2.1.2 – foF2 欠測緩和・品質区分パッチ
 
-## 変更箇所（2ファイルのみ）
+## 対象
 
-- `docs/nict_compare.html`: 「前日側24時間＋続く3日間（合計96時間）」をグラフ初期表示に設定。IRI単独を画面に重ねず、従来どおりTEC連動foF2を主表示。表示期間内の有効点数・欠測点数・1 MHz縦目盛り・UTC 6時間補助線を維持。Excelの`foF2_Charts`は選択した表示期間に対応し、`Forecast_30min`等の生データは従来どおり241点を保存。
-- `docs/shared/fof2-window-diagnostics.mjs`: 予報時刻から最大96時間を選択する機能と、欠測した時刻について「最近傍のIRI計算点に記録された棄却理由」の参考内訳を表示する機能。
+`SWIFT-ION` v2.1 + v2.1.1（NICT 96h 横軸表示）を導入済みのリポジトリに適用してください。
+SWIFT-TEC 原本は変更しません。`pages.yml` / GitHub Actions のステップ順や既存の365日履歴ブランチは変更しません。
 
-ZIP中の`tests/test_fof2_window_diagnostics.mjs`は任意のローカル検査で、GitHub Actionsの既存Pythonテストには影響しません。
+## インストール（GitHub Desktop）
 
-## 導入手順
+1. ZIP を解凍します。
+2. `.github` は含まれません。解凍した `scripts/`, `docs/`, `tests/` を SWIFT-ION リポジトリ直下に上書きしてください。**既存フォルダを削除しないこと**。
+3. `git diff` に `scripts/build_ion_forecast.py`, `scripts/build_tec_skill.py`, `scripts/build_fof2_stage_skill.py`, `scripts/train_fof2_calibration.py`, `docs/nict_compare.html`, `docs/year.html`, `docs/shared/fof2-window-diagnostics.mjs` および新しい tests があることを確認します。
+4. GitHub Desktop で Commit → Push。新たに走る `Build and publish SWIFT-ION` が成功することを確認してください。
+5. `https://sgsy4c2zh7-tech.github.io/SWIFT-ION/nict_compare.html` を更新し、「通常」「低信頼・拡張」の参考件数を確認します。`year.html` ではスコア母数の区分を確認できます。
 
-1. ZIPを展開する。
-2. `docs/nict_compare.html` および `docs/shared/fof2-window-diagnostics.mjs` を、GitHub Desktopで管理する`SWIFT-ION`の同じ相対パスへコピーする。既存の`nict_compare.html`は上書きする。
-3. GitHub DesktopでCommit → Pushする。例： `Show 24h reference and 72h TEC foF2 forecast with missing-data diagnostics`
-4. GitHub Pagesの`https://sgsy4c2zh7-tech.github.io/SWIFT-ION/nict_compare.html`を確認する。
-5. 「表示期間」では「前日側24h＋3日間（SWIFT-TEC形式）」がデフォルト。全241フレームを見たい場合は「全モデル時刻（参考）」に切り替えられる。
+## なぜ途切れたか
 
-## どこまでが確実か
+もともと TEC-linked foF2 は、SWIFT-TEC 全 VTEC / IRI(100–2000 km)部分TEC = R について `0.5 <= R <= 2.0` の場合だけ計算されていました。また高度2000km付近のIRI電子密度がピークの10%を超える場合も棄却しました。したがって VTEC自体が存在しても夜間や低緯度で大量の空欄となりました。
 
-- 現在のSWIFT-TECは`runForecast()`でNOAAの3日間Kpテキストを取り込み、`rStorm(kpF)`に渡してVTEC予報を計算する。SWIFT-IONはそのVTECにIRI鉛直電子密度を組み合わせてfoF2を推定する。経験/AI段階では別途NOAA予報Kpを説明変数に使える。
-- 一方、SWIFT-TECの現行コードは5日間（241フレーム）を生成し、3日間Kpの範囲外では最初/最後の日のKpを延長使用する。NOAA取得・Kp解析が不成立ならKp=3を代用する経路もある。**特定の公開実行で有効なKpが使われたかは、この画面と静的コードだけでは断定できない。** GitHub Actionsの元のSWIFT-TEC計算ログや入力記録で確認する必要がある。
-- 初期表示はデータの最初のフレーム時刻から96時間（最初の24時間を前日側の参考領域、続く72時間を3日間側とみなす）。**時刻の区分は表示上の便宜で、予報発表日・NOAA Kpの3日間公表範囲と完全一致することを保証しない。** 前日側を実測として扱わない。
-- foF2の欠測は`F=VTEC_SWIFT/TEC_IRI(100–2000km)`が`[0.5,2.0]`外、IRIの高度上端（topside）の条件不成立、VTEC欠損などの品質判定に起因し得る。欠測はそのまま欠測にする。
-- 欠測理由の内訳は各観測所の「最も近いモデル格子点」の記録を参考として集計。観測所位置では複数格子点を補間しているため、**特定の欠測の正確な理由を示すものではない**。
-- 3段階の物理/経験/AI計算、SWIFT-TEC本体、SWIFT-IONのモデル生成、GitHub Actions、365日履歴はこのパッチでは変更しない。
+## v2.1.2 の処理
 
-## 検査
+- **STANDARD**（元の許容条件を満たす）: 元と全く同じ値 `R` を採用します。学習済み経験/AI補正を従来どおり適用できます。
+- **EXTENDED**（入力VTECとIRIが存在するが厳密な比率/上端条件外）: 値を欠損にせず、物理的精度を保証しない**低信頼の参考感度推定**として出します。経験/AI補正は禁止です。
+- **MISSING**（元のVTECが欠測、F2ピークが得られない等）: 今回も欠測です。IRIで埋めたり、0で埋めたりしません。
 
-- `node tests/test_fof2_window_diagnostics.mjs` — 241フレーム中の最大96時間選択（193点）、境界、欠測診断の集計を確認。
-- `node --check` でJavaScriptモジュールとHTML内スクリプトの構文検査済み。
-- GitHub Pages上の本番ブラウザ描画および特定実行のNOAA Kp取得履歴は未確認。
+`EXTENDED` に適用する「滑らかな制限付き比率」：
+
+```
+R = VTEC_SWIFT / TEC_IRI_100_2000
+if R < 0.5:
+    R_used = 0.35 + 0.15 * exp(-(0.5-R)/0.15)
+elif R <= 2.0:
+    R_used = R
+else:
+    R_used = 2.0 + 0.5 * (1-exp(-(R-2.0)/0.5))
+foF2_physics = foF2_IRI * sqrt(R_used)
+```
+
+**これは検証済みの新しい物理則ではなく、表示とモデル感度比較のための保守的な外挿処理**です。上端プロファイルが十分収束しない場合も、EXTENDEDのまま参考値と明示されます。滑らかさや空欄減少自体は予報精度の改善を証明しません。
+
+`docs/ion_forecast.json` に追加のフィールド：`fof2_quality`, `fof2_strict_mhz`, `fof2_strict_failure`, `fof2_raw_vtec_ratio`。旧フィールド名・JSON schema は変更していません。`metadata.fof2_quality_counts` で内訳が分かります。
+
+## 365日精度検証と学習の扱い
+
+- これまでと同じ `swift-ion-history`、発表日時/観測日時の照合を使います。
+- 経験/AI補正の学習は **STANDARD** の過去観測照合ペアのみ。**EXTENDED は学習対象外**。
+- 365日「正式な主表示の的中率」は STANDARD のみを従来どおり比較します。
+- EXTENDED の参考的中率は **別集計** として `docs/tec_skill.json` / `docs/fof2_stage_skill.json`、日別・月別CSVに記録します。`year.html` に通常/拡張の件数を表示します。
+- 過去の予報を再計算して新たな事前予報と偽ることはしません。
+
+## 安全性／注意
+
+- モデルには同じ積分範囲ではない VTEC と IRI 部分 TEC の比較に起因する不確かさがあります。EXTENDED は観測済み値でも、本来の電離圏の鉛直復元でもありません。
+- `fof2_physics_mhz` / `fof2_tec_mhz` に EXTENDED が入っても、AIは適用されず、`fof2_quality` で区別できます。
+- 96時間（前日側24時間+3日間）表示は保持。元の241フレームは学習履歴のため変更しません。
+- 本番データのVTEC値・IRI値の範囲によっては欠測が残ります。正常かどうかは再デプロイ後の予報JSONを確認してください。
+
+## ローカル検査
+
+- Python `unittest` 20件成功（v2.1の3段階テスト10件 + 追加10件）
+- Node.js の JS 診断テスト2件成功
+- HTML インラインJavaScript とモジュールの構文検査成功
+- 合成入力での2フレーム予報生成と品質フラグ／学習除外／通常スコア分離を検証
+- GitHub Actions本番の実行・公開は未検証

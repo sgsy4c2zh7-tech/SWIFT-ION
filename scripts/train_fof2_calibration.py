@@ -21,6 +21,9 @@ def training_rows(history,now):
     for day in dates(first,now.date()):
         for m in read_daily(Path(history)/'tec_matches',day):
             try:
+                # Provisional extended estimates are evaluated separately,
+                # never used to fit coefficients trained for STANDARD inputs.
+                if m.get('fof2_quality','STANDARD') != 'STANDARD':continue
                 issue=time_utc(m['issued_at']);obs=time_utc(m['observed_at']);valid=time_utc(m['valid_at'])
                 if not (issue<valid and issue<obs-timedelta(minutes=30) and obs<cutoff):continue
                 real=num(m.get('observed_fof2_mhz'),0.1,35)

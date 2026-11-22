@@ -90,10 +90,16 @@ def sample_station(frame, lat, lon):
     physical=aggregate('fof2_physics_mhz',require_all=True)
     empirical=aggregate('fof2_empirical_mhz',require_all=True)
     ai=aggregate('fof2_ai_mhz',require_all=True)
+    # Never claim that an EXTENDED sensitivity estimate has the same quality
+    # as original STRICT baseline. Legacy cells without quality tags are
+    # treated as STANDARD because they only contain accepted ratio values.
+    qualities=[c.get('fof2_quality','STANDARD') for _,c in rows]
+    quality='STANDARD' if all(q=='STANDARD' for q in qualities) else 'EXTENDED' if all(q in ('STANDARD','EXTENDED') for q in qualities) else 'MISSING'
     def driver(key,hi):
         vals=[c.get(key) for _,c in rows]
         return round(sum(vals)/len(vals),3) if vals and all(valid_number(v) and 0<=v<=hi for v in vals) else None
     return {'predicted_fof2_iri_mhz':round(baseline,4),
+            'fof2_quality':quality,
             'predicted_fof2_tec_mhz':round(linked,4) if linked is not None and 0<linked<=35 else None,
             'predicted_fof2_physics_mhz':round(physical,4) if physical is not None and physical>0 else None,
             'predicted_fof2_empirical_mhz':round(empirical,4) if empirical is not None and empirical>0 else None,
@@ -140,8 +146,8 @@ def build_snapshot(model, observations, now, max_stations=MAX_STATIONS):
     return {'metadata':{
         'schema':SCHEMA, 'issued_at':iso(now),'source_issued_at':iso(issued_model),
         'source_model_schema':model['schema'], 'source_is_validated':False,
-        'model_type':'IRI-2020 future anchors plus bounded uniform SWIFT-TEC VTEC scaling',
-        'experiment':'foF2 correction via square root of eligible TEC ratio',
+        'model_type':'IRI-2020 future anchors plus strict SWIFT-TEC scaling / flagged conservative extended sensitivity',
+        'experiment':'foF2 correction via square root of quality-tagged TEC ratio',
         'is_3d_observation':False,'station_catalog':'KC2G/GIRO-derived public station metadata',
         'min_target_buffer_minutes':30, 'spatial_method':'local 4-neighbour IDW; complete TEC-only when all model cells eligible',
         'warning':'Prospective *experimental scenario*, not operational foF2 forecast or TEC assimilation.'},
@@ -190,6 +196,7 @@ def score_observations(observations, snapshots, now):
                      'time_gap_minutes':round((obs_at-target).total_seconds()/60,3),
                      'confidence':obs['confidence'],'observed_fof2_mhz':observed,
                      'predicted_fof2_iri_mhz':f.get('predicted_fof2_iri_mhz'),
+                     'fof2_quality':f.get('fof2_quality','STANDARD'),
                      'predicted_fof2_tec_mhz':f.get('predicted_fof2_tec_mhz'),
                      'predicted_fof2_physics_mhz':f.get('predicted_fof2_physics_mhz'),
                      'predicted_fof2_empirical_mhz':f.get('predicted_fof2_empirical_mhz'),
@@ -247,14 +254,23 @@ def metric(rows, key):
 
 def paired_summary(rows):
     all_baseline=metric(rows,'predicted_fof2_iri_mhz')
-    accepted=[r for r in rows if valid_number(r.get('predicted_fof2_iri_mhz')) and valid_number(r.get('predicted_fof2_tec_mhz')) and valid_number(r.get('observed_fof2_mhz'))]
+    candidates=[r for r in rows if valid_number(r.get('predicted_fof2_iri_mhz'))
+                and valid_number(r.get('predicted_fof2_tec_mhz')) and valid_number(r.get('observed_fof2_mhz'))]
+    # Preserve headline strict comparisons: do NOT silently promote expanded
+    # sensitivity values into the same validation population.
+    accepted=[r for r in candidates if r.get('fof2_quality','STANDARD')=='STANDARD']
+    extended=[r for r in candidates if r.get('fof2_quality')=='EXTENDED']
     iri=metric(accepted,'predicted_fof2_iri_mhz')
     tec=metric(accepted,'predicted_fof2_tec_mhz')
     improvement=round(tec['hit_rate_percent']-iri['hit_rate_percent'],2) if accepted else None
     return {'matching_records':len(rows),'iri_all':all_baseline,'paired_iri':iri,
             'paired_tec':tec,'paired_count':len(accepted),
             'tec_coverage_percent':round(100*len(accepted)/all_baseline['sample_count'],2) if all_baseline['sample_count'] else None,
-            'hit_rate_gain_pp':improvement}
+            'hit_rate_gain_pp':improvement,
+            'display_coverage_percent':round(100*len(candidates)/all_baseline['sample_count'],2) if all_baseline['sample_count'] else None,
+            'extended_paired_count':len(extended),
+            'extended_iri':metric(extended,'predicted_fof2_iri_mhz'),
+            'extended_tec':metric(extended,'predicted_fof2_tec_mhz')}
 
 
 def report(history, now):
@@ -284,7 +300,7 @@ def report(history, now):
         'observations_license':'GIRO-derived via KC2G: CC BY-NC-SA 4.0; noncommercial; acknowledge station providers',
         'is_validated_assimilative_forecast':False,'is_hmf2_tec_skill':False,
         'is_3d_density_skill':False,
-        'warning':'Research-only uniform scaling scenario. Ineligible TEC corrections excluded from paired denominator. Missing observations do not count as misses; no backfill of issued forecasts.'},
+        'warning':'Research-only uniform scaling scenario. MAIN paired accuracy uses STANDARD quality only; EXTENDED low-confidence estimates have separately labeled provisional metrics. Missing observations do not count as misses; no retrospective forecast backfill.'},
         'status':'AVAILABLE' if sum(x['paired_count'] for x in byh.values()) else 'AWAITING_PAIRED_PROSPECTIVE_MATCHES',
         'total_matches':total,'observation_days_with_matches':len(seen),
         'by_horizon':byh,'daily':daily,'monthly':monthly}
@@ -294,7 +310,8 @@ def export_csv(path, rows, date_key):
     names=[date_key,'horizon_h','matching_records','all_iri_n','paired_n','tec_coverage_pct',
            'iri_hit_pct_paired','tec_hit_pct_paired','gain_percentage_points',
            'iri_mae_mhz_paired','tec_mae_mhz_paired','iri_rmse_mhz_paired','tec_rmse_mhz_paired',
-           'iri_bias_mhz_paired','tec_bias_mhz_paired']
+           'iri_bias_mhz_paired','tec_bias_mhz_paired',
+           'extended_paired_n','extended_tec_hit_pct_provisional','display_coverage_pct']
     with Path(path).open('w',newline='',encoding='utf-8-sig') as f:
         w=csv.DictWriter(f,fieldnames=names);w.writeheader()
         for item in rows:
@@ -302,7 +319,10 @@ def export_csv(path, rows, date_key):
             'horizon_h':item['horizon_h'],'matching_records':s['matching_records'],'all_iri_n':s['iri_all']['sample_count'],
             'paired_n':s['paired_count'],'tec_coverage_pct':s['tec_coverage_percent'],
             'iri_hit_pct_paired':iri['hit_rate_percent'],'tec_hit_pct_paired':tec['hit_rate_percent'],
-            'gain_percentage_points':s['hit_rate_gain_pp']}
+            'gain_percentage_points':s['hit_rate_gain_pp'],
+            'extended_paired_n':s['extended_paired_count'],
+            'extended_tec_hit_pct_provisional':s['extended_tec']['hit_rate_percent'],
+            'display_coverage_pct':s['display_coverage_percent']}
             for key in ('mae','rmse','bias'):
                 base[f'iri_{key}_mhz_paired']=iri[key];base[f'tec_{key}_mhz_paired']=tec[key]
             w.writerow(base)

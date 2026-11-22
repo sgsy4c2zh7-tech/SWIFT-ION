@@ -27,15 +27,21 @@ def score(rows,key):
             'bias_mhz':round(mean(errors),4) if n else None}
 
 def rollup(rows):
-    s={key:score(rows,key) for key in FIELDS}
-    pe=[r for r in rows if all(valid_number(r.get(FIELDS[k])) for k in ('physics','empirical'))]
-    ea=[r for r in rows if all(valid_number(r.get(FIELDS[k])) for k in ('empirical','ai'))]
-    all3=[r for r in rows if all(valid_number(r.get(FIELDS[k])) for k in FIELDS)]
+    # Main 3-stage skill is strict and longitudinally comparable. Retain
+    # low-confidence extended physics values separately as provisional only.
+    standard=[r for r in rows if r.get('fof2_quality','STANDARD')=='STANDARD']
+    extended=[r for r in rows if r.get('fof2_quality')=='EXTENDED']
+    s={key:score(standard,key) for key in FIELDS}
+    pe=[r for r in standard if all(valid_number(r.get(FIELDS[k])) for k in ('physics','empirical'))]
+    ea=[r for r in standard if all(valid_number(r.get(FIELDS[k])) for k in ('empirical','ai'))]
+    all3=[r for r in standard if all(valid_number(r.get(FIELDS[k])) for k in FIELDS)]
     def pair(arr, a,b):
         aa=score(arr,a);bb=score(arr,b)
         return {'n':len(arr),a:aa,b:bb,'gain_hit_pp':round(bb['hit_pct']-aa['hit_pct'],2) if arr else None,
                 'mae_gain_mhz':round(aa['mae_mhz']-bb['mae_mhz'],4) if arr else None}
-    return {'records':len(rows),'stages':s,'physics_empirical_same_observations':pair(pe,'physics','empirical'),
+    return {'records':len(rows),'strict_records':len(standard),'extended_records':len(extended),
+            'extended_provisional_physics':score(extended,'physics'),
+            'stages':s,'physics_empirical_same_observations':pair(pe,'physics','empirical'),
             'empirical_ai_same_observations':pair(ea,'empirical','ai'),
             'all_three_same_observations':{'n':len(all3), 'stages':{k:score(all3,k) for k in FIELDS}}}
 
@@ -73,18 +79,22 @@ def report(history,now):
                         'predeployment_backfill':False,
                         'notes':['AI stage is only assessed when prospectively issued trained AI values exist.',
                                  'Overlapping target lead groups are not independent samples.',
+                                 'The headline three-stage scores include only STANDARD source-quality predictions; EXTENDED provisional physics is separate.',
                                  'Missing data excluded, not scored as zero.',
                                  'Model selection holdout is separate from these prospective skill reports.']},
             'total_matches':n,'by_horizon':by,'daily':ds,'monthly':ms}
 
 def write_csv(path,rows,key):
-    headings=[key,'horizon_h','records','stage','n','hits','hit_pct','mae_mhz','rmse_mhz','bias_mhz','all_three_n']
+    headings=[key,'horizon_h','records','strict_records','extended_records','extended_physics_hit_pct_provisional','stage','n','hits','hit_pct','mae_mhz','rmse_mhz','bias_mhz','all_three_n']
     with Path(path).open('w',encoding='utf-8-sig',newline='') as f:
         w=csv.DictWriter(f,fieldnames=headings);w.writeheader()
         for r in rows:
             s=r['summary']
             for stage,metrics in s['stages'].items():
-                w.writerow({key:r[key],'horizon_h':r['horizon_h'],'records':s['records'],'stage':stage,
+                w.writerow({key:r[key],'horizon_h':r['horizon_h'],'records':s['records'],'strict_records':s['strict_records'],
+                    'extended_records':s['extended_records'],
+                    'extended_physics_hit_pct_provisional':s['extended_provisional_physics']['hit_pct'],
+                    'stage':stage,
                     **metrics,'all_three_n':s['all_three_same_observations']['n']})
 
 def run(history,docs,now=None):

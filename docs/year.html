@@ -47,6 +47,7 @@ fieldset{border:0;padding:0;display:flex;gap:12px;flex-wrap:wrap;align-items:end
 <h2>TEC連動foF2｜3段階モデルの365日的中率</h2>
 <p class="small">同じ予報発表時点の <b>①TEC/IRI物理推定 → ②経験係数補正 → ③非線形ML補正</b> を、後日取得したイオノゾンデ観測で照合します。予報リードタイムと期間は上部の設定と連動します。的中は誤差±1 MHz以内です。</p>
 <p class="small" id="stageStatus">段階別の予報精度履歴を読み込み中…</p>
+<p class="small" id="stageQuality">通常判定と低信頼・拡張参考推定を区別して集計します。</p>
 <p class="small" id="fof2CalibrationStatus">経験係数・AI補正モデルの学習状況を確認中…</p>
 <div class="cards">
  <div class="card"><b id="stagePhysics">—</b><small>物理推定的中率</small><small id="stagePhysicsCount">評価待ち</small></div>
@@ -64,6 +65,7 @@ fieldset{border:0;padding:0;display:flex;gap:12px;flex-wrap:wrap;align-items:end
 <p class="small"><span style="color:#75dff5">━━ 物理推定</span> ／ <span style="color:#f4c16e">━━ 経験補正</span> ／ <span style="color:#c6a4fc">━━ AI補正</span>。欠測日を0%とみなさず、発表していない予報を過去に遡って作りません。</p>
 <h3>月別比較（3段階）</h3><div class="scroll"><table><thead><tr><th>月（UTC）</th><th>段階</th><th>評価数</th><th>的中率</th><th>MAE (MHz)</th><th>RMSE (MHz)</th><th>Bias (MHz)</th></tr></thead><tbody id="stageMonths"></tbody></table></div>
 <p><a href="./fof2_calibration.json">学習済み補正係数（JSON）</a> ／ <a href="./fof2_stage_daily.csv">3段階・日別CSV</a> ／ <a href="./fof2_stage_monthly.csv">3段階・月別CSV</a> ／ <a href="./fof2_stage_skill.json">3段階・365日JSON</a></p>
+<p class="small">通常判定（STANDARD）の予報のみを上の3段階的中率に含めます。拡張推定（EXTENDED）の件数・参考的中率は別表示し、AI学習には使用しません。</p>
 <p class="small">上記は<b>導入後に発表されたモデルの事後検証</b>で、AIモデル採用時の時間分離検証（holdout）とは独立です。各段階で利用可能な予報点数は異なります。差分には同じ観測に両段階の予報が存在したペアのみを使っています。学習が不足している場合は物理推定のみが有効です。</p>
 </section>
 <section class="panel"><h2>集計・出典</h2><p class="small" id="meta"></p><p class="small">データ出典：KC2G集約のGIRO/INGV由来イオノゾンデ。非商用研究用。原観測局の謝辞・再配布条件に従ってください。1観測・同一リードタイムにつき重複は1件に統一します。履歴ブランチでの365日保存はアクティブファイルを対象とし、削除前のGitコミットには古い内容が残る場合があります。</p><p><a href="./year_accuracy.json">機械可読JSON</a> ／ <a href="https://giro.uml.edu/didbase/RulesOfTheRoad.html">GIRO利用条件</a></p></section>
@@ -187,7 +189,12 @@ function stageRender(){if(!stagePayload)return;
    for(const value of [m.month_utc,stageNames[stage],x.n,x.hit_pct==null?'—':fmt(x.hit_pct)+'%',fmt(x.mae_mhz),fmt(x.rmse_mhz),fmt(x.bias_mhz)])tr.insertCell().textContent=String(value);
   }
  }
- $('stageStatus').textContent=`${stagePayload.status} ｜ 保存対象365日 ｜ 発表後照合 ${stagePayload.total_matches}件 ｜ ${period}日表示 ／ ${horizon}時間先`; 
+ $('stageStatus').textContent=`${stagePayload.status} ｜ 保存対象365日 ｜ 発表後照合 ${stagePayload.total_matches}件 ｜ ${period}日表示 ／ ${horizon}時間先`;
+ const nStandard=daily.reduce((n,r)=>n+(r.summary?.strict_records||0),0);
+ const nExtended=daily.reduce((n,r)=>n+(r.summary?.extended_records||0),0);
+ const nExtendedValid=daily.reduce((n,r)=>n+(r.summary?.extended_provisional_physics?.n||0),0);
+ const hitsExtended=daily.reduce((n,r)=>n+(r.summary?.extended_provisional_physics?.hits||0),0);
+ $('stageQuality').textContent=`品質区分：通常判定 ${nStandard}件（3段階的中率の母数）／低信頼・拡張参考 ${nExtended}件（うち観測と照合 ${nExtendedValid}件、参考的中率 ${nExtendedValid?fmt(100*hitsExtended/nExtendedValid)+'%':'評価待ち'}）。低信頼値はAI学習・通常的中率に混入させません。`; 
 }
 fetch('./fof2_calibration.json',{cache:'no-store'})
  .then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()})
