@@ -122,14 +122,25 @@ def build_snapshot(model, observations, now, max_stations=MAX_STATIONS):
     by_time = {parse_utc(f['valid_at']): f for f in model['frames']}
     forecasts=[]
     unique=set()
-    for obs in observations.get('stations', []):
+    # Reserve the first four issue-time sampling slots for the published NICT
+    # station coordinates. This uses station METADATA, not observations, so it
+    # cannot leak any future measured foF2 into an issued prediction.
+    nict_fixed=[{'station':'WAKKANAI','lat':45.16,'lon':141.75},
+                {'station':'KOKUBUNJI','lat':35.71,'lon':139.49},
+                {'station':'YAMAGAWA','lat':31.20,'lon':130.62},
+                {'station':'OKINAWA','lat':26.68,'lon':128.15}]
+    station_list=nict_fixed+list(observations.get('stations', []))
+    visited_coordinates=[]
+    for obs in station_list:
         if len(unique) >= max_stations: break
         try:
             name = str(obs['station']).strip()
             lat, lon = float(obs['lat']),float(obs['lon'])
             if not name or name in unique or not (-90<=lat<=90 and -180<=lon<=180): continue
+            if any(distance_km((lat,lon),loc)<=15 for loc in visited_coordinates):continue
         except (ValueError, TypeError, KeyError):
             continue
+        visited_coordinates.append((lat,lon))
         unique.add(name)
         for h in HORIZONS_H:
             target = next_utc_hour(now+timedelta(hours=h))
@@ -148,7 +159,7 @@ def build_snapshot(model, observations, now, max_stations=MAX_STATIONS):
         'source_model_schema':model['schema'], 'source_is_validated':False,
         'model_type':'IRI-2020 future anchors plus strict SWIFT-TEC scaling / flagged conservative extended sensitivity',
         'experiment':'foF2 correction via square root of quality-tagged TEC ratio',
-        'is_3d_observation':False,'station_catalog':'KC2G/GIRO-derived public station metadata',
+        'is_3d_observation':False,'station_catalog':'NICT four official station coordinates plus KC2G/GIRO-derived stations (metadata only)',
         'min_target_buffer_minutes':30, 'spatial_method':'local 4-neighbour IDW; complete TEC-only when all model cells eligible',
         'warning':'Prospective *experimental scenario*, not operational foF2 forecast or TEC assimilation.'},
         'forecasts':forecasts,'station_count':len(unique)}, 'AVAILABLE'

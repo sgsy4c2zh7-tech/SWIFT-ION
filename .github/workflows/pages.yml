@@ -109,6 +109,39 @@ jobs:
           fi
 
 
+      # Independent NICT four-station foF2 observations. This bridge only
+      # ingests numeric CSV with explicit UTC or JST semantics. Official NICT
+      # archive landing pages are NOT machine-readable CSV endpoints.
+      # Optional secret NICT_AUTO_SOURCE_URLS is a JSON mapping from station to
+      # a verified official numeric CSV link. Leave unset until verified.
+      # Dataset reuse/attribution must be checked by the operator.
+      - name: Ingest NICT four-station observations and score prior forecasts
+        shell: bash
+        env:
+          NICT_AUTO_SOURCE_URLS: ${{ secrets.NICT_AUTO_SOURCE_URLS }}
+        run: |
+          mkdir -p nict_import
+          if [ -n "$NICT_AUTO_SOURCE_URLS" ]; then
+            printf '%s' "$NICT_AUTO_SOURCE_URLS" > "$RUNNER_TEMP/nict-verified-urls.json"
+            python scripts/build_nict_fof2.py \
+              --history _swift_ion_history \
+              --docs docs \
+              --import-dir nict_import \
+              --urls-json "$RUNNER_TEMP/nict-verified-urls.json"
+          else
+            python scripts/build_nict_fof2.py \
+              --history _swift_ion_history \
+              --docs docs \
+              --import-dir nict_import
+          fi
+          python - <<'PYNICT'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('docs/nict_fof2_status.json').read_text())
+          assert d['schema']=='swift-ion-nict-four-station-v1'
+          print('NICT observation bridge:',d['status'],d['observations_retained'])
+          PYNICT
+
       - name: Read NOAA Kp forecast and observed F10.7 for optional foF2 predictors
         run: python scripts/build_fof2_drivers.py --out docs/fof2_drivers.json
 
@@ -285,6 +318,8 @@ jobs:
             docs/fof2_stage_daily.csv
             docs/fof2_stage_monthly.csv
             docs/fof2_calibration.json
+            docs/nict_fof2_status.json
+            docs/nict_fof2_4station.csv
             docs/fof2_drivers.json
             docs/space_weather.json
             docs/density_slices.json

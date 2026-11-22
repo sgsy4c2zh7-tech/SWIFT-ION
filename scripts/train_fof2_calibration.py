@@ -19,7 +19,12 @@ def training_rows(history,now):
     first=now.date()-timedelta(days=RETENTION_DAYS-1)
     best={}
     for day in dates(first,now.date()):
-        for m in read_daily(Path(history)/'tec_matches',day):
+        # GIRO/KC2G + independent NICT observations (if ingested), with
+        # identical issue-before-observation leakage safeguards. Missing NICT
+        # data never synthesizes examples; it simply contributes zero rows.
+        historic=read_daily(Path(history)/'tec_matches',day)
+        historic+=read_daily(Path(history)/'nict_matches',day)
+        for m in historic:
             try:
                 # Provisional extended estimates are evaluated separately,
                 # never used to fit coefficients trained for STANDARD inputs.
@@ -41,9 +46,13 @@ def training_rows(history,now):
                 row={'issued_at':issue,'observed_at':obs,'day':obs.date().isoformat(),
                      'station':str(m['station']),'lat':lat,'lon':lon,'valid_at':valid,
                      'physical':physical,'reference':reference,'actual':real,'kp':kp,'f107':f107}
-                key=(row['station'],obs.isoformat())
+                # Do not double-count the same station/time across GIRO and NICT
+                # aliases; prefer NICT when both have measurements.
+                key=(round(lat,1),round(lon,1),obs.isoformat())
+                row['data_provider']='NICT' if 'observation_source' in m else 'GIRO_KC2G'
                 old=best.get(key)
-                if old is None or issue<old['issued_at']:best[key]=row
+                if old is None or (row['data_provider']=='NICT' and old['data_provider']!='NICT') or (row['data_provider']==old['data_provider'] and issue<old['issued_at']):
+                    best[key]=row
             except (KeyError,TypeError,ValueError,OverflowError):continue
     return sorted(best.values(),key=lambda r:r['observed_at'])
 
@@ -77,7 +86,9 @@ def fit(history,now):
     dates_available=sorted({r['day'] for r in rows})
     output={'schema':SCHEMA,'trained_at':now.isoformat().replace('+00:00','Z'),
       'training_rows':len(rows),'independent_observation_days':len(dates_available),
-      'source':'Prospectively issued foF2 from past runs + later GIRO/KC2G observations',
+      'nict_training_rows':sum(r.get('data_provider')=='NICT' for r in rows),
+      'giro_training_rows':sum(r.get('data_provider')!='NICT' for r in rows),
+      'source':'Prospectively issued foF2 + later GIRO/KC2G and optionally NICT four-site observations (source tagged)',
       'future_observations_used':False,'method':'Chronological split, ridge empirical + nonlinear ridge ML residual',
       'empirical':{'active':False,'coefficients':None,'feature_names':EMP_NAMES,'holdout_mae_physics_mhz':None,'holdout_mae_empirical_mhz':None},
       'ai':{'active':False,'coefficients':None,'feature_names':AI_NAMES,'holdout_mae_empirical_mhz':None,'holdout_mae_ai_mhz':None},

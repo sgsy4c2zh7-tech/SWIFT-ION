@@ -1,0 +1,19 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SWIFT-ION NICT foF2 Validation</title><style>:root{color-scheme:dark}*{box-sizing:border-box}body{background:#071828;color:#e7f4ff;font:14px/1.6 system-ui,sans-serif;margin:0}header{padding:24px;background:#11334a}h1{margin:0;font-size:24px}a{color:#7de3f5}.wrap{max-width:1160px;margin:auto;padding:20px}.info{padding:14px;border:1px solid #31556b;background:#103049;border-radius:10px;margin-bottom:12px;white-space:pre-wrap}table{width:100%;border-collapse:collapse}td,th{padding:10px;border-bottom:1px solid #31556b;text-align:right}th:first-child,td:first-child{text-align:left}.pane{padding:15px;border-radius:12px;background:#102c43;border:1px solid #36556c;overflow:auto}.muted{color:#a8c9de;font-size:12px}</style></head><body>
+<header><h1>NICT 4地点｜実測foF2・事前予報の検証</h1><nav><a href="./nict_compare.html">NICTグラフ</a> ｜ <a href="./year.html">365日精度履歴</a> ｜ <a href="https://wdc.nict.go.jp/Ionosphere/en/archive/isdj_auto_txt.html">NICTアーカイブ</a></nav></header><main class="wrap"><div id="status" class="info">NICT観測状況を読み込み中…</div><div class="pane"><h2>過去365日のfoF2 — 物理・経験・AIの段階別評価（通常品質のみ）</h2><table><thead><tr><th>観測所</th><th>モデル段階</th><th>照合数</th><th>的中率（±1 MHz）</th><th>MAE（MHz）</th><th>Bias（MHz）</th></tr></thead><tbody id="rows"></tbody></table></div><div id="training" class="info" style="margin-top:12px">経験係数・AIモデル: 状態確認中…</div><p class="muted">発表済み予報と、その後の実測のみを使用。未取得の観測、対象外の低信頼推定は本表の母数に含めない。自動読取値には品質確認が必要です。研究用の暫定的中率であり、運用上の保証ではありません。</p><p class="muted">Data source: WDC for Ionosphere and Space Weather, Tokyo, National Institute of Information and Communications Technology. 掲載と二次利用の条件はNICT公式方針を確認してください。</p></main>
+<script>
+const $=id=>document.getElementById(id),names={WAKKANAI:'稚内／サロベツ',KOKUBUNJI:'国分寺',YAMAGAWA:'山川',OKINAWA:'沖縄／大宜味'};
+fetch('./nict_fof2_status.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('NICT status '+r.status);return r.json()}).then(d=>{
+ $('status').textContent=`取得状態: ${d.status}\n保管した実測値: ${d.observations_retained}件 ／ 発表済み予報との一致: ${d.prospective_matches_retained}件\n新規観測: ${d.new_observations}件 ／ 新規照合: ${d.new_prospective_matches}件\n更新: ${d.generated_at}`+(d.warnings?.length?'\n取込警告: '+d.warnings.join(' / '):'');
+ $('rows').replaceChildren(...Object.entries(names).flatMap(([id,name])=>['physics','empirical','ai'].map((stage)=>{
+   const v=d.stations?.[id]?.stages?.[stage]||{};
+   const tr=document.createElement('tr');
+   [name,({physics:'物理推定',empirical:'経験補正',ai:'AI補正'})[stage],v.n??0,
+     v.hit_rate_pct==null?'評価待ち':v.hit_rate_pct+'%',v.mae_mhz??'—',v.bias_mhz??'—']
+     .forEach(x=>{const td=document.createElement('td');td.textContent=String(x);tr.appendChild(td)});
+   return tr;
+ })));
+}).catch(e=>{$('status').textContent='実測データは未登録です: '+e.message});
+fetch('./fof2_calibration.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('未公開');return r.json()}).then(x=>{
+ $('training').textContent=`経験補正 / AI学習: ${x.status}｜学習ペア ${x.training_rows}件（NICT ${x.nict_training_rows??0}件）｜独立観測日 ${x.independent_observation_days}日。実観測の事前予報ペアが不足する場合は物理推定のみ。`;
+}).catch(()=>{$('training').textContent='経験補正 / AI学習: 校正レポート未公開'});
+</script></body></html>
