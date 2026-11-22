@@ -197,6 +197,26 @@ jobs:
           print('Rolling-year verification:', r['status'], r['total_matches'], 'matched records')
           PY
 
+      # Supplemental prospective evaluation of bounded SWIFT-TEC-linked foF2.
+      # This writes its own tec_* files inside the SAME 365-day history worktree;
+      # all existing IRI baseline archive files, retention and steps stay intact.
+      - name: Record paired TEC-linked foF2 skill (365 days)
+        run: |
+          python scripts/build_tec_skill.py \
+            --observations docs/ionosonde_validation.json \
+            --model docs/ion_forecast.json \
+            --history _swift_ion_history \
+            --docs docs
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          t=json.loads(Path('docs/tec_skill.json').read_text(encoding='utf-8'))
+          assert t['schema']=='swift-ion-tec-fof2-skill-365-v1'
+          assert t['metadata']['retention_days']==365
+          assert t['metadata']['is_validated_assimilative_forecast'] is False
+          print('TEC-linked paired foF2 skill:',t['status'],t['total_matches'],'matches')
+          PY
+
       - name: Commit 365-day history to dedicated branch
         shell: bash
         run: |
@@ -221,6 +241,9 @@ jobs:
             docs/station_outlook.json
             docs/prospective_skill.json
             docs/year_accuracy.json
+            docs/tec_skill.json
+            docs/tec_skill_daily.csv
+            docs/tec_skill_monthly.csv
             docs/space_weather.json
             docs/density_slices.json
             docs/explorer_data.json

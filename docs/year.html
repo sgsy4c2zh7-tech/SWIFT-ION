@@ -11,14 +11,37 @@ fieldset{border:0;padding:0;display:flex;gap:12px;flex-wrap:wrap;align-items:end
 @media(max-width:700px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}main{padding:16px 10px 40px}table{font-size:11px}}
 </style></head><body><main>
 <h1>SWIFT-ION <span style="color:#80cdfd">365-day Accuracy History</span></h1>
-<p>将来時刻に発表したIRI気候モデルのfoF2・hmF2推定値を、後から取得したイオノゾンデ観測と事後照合します。</p>
-<nav><a href="./skill.html">直近の予報照合</a><a href="./ionosonde.html">観測とIRI</a><a href="./ionosphere.html">全球モデル</a><a href="./quality.html">品質管理</a><a href="./year_daily.csv">日別CSV</a><a href="./year_monthly.csv">月別CSV</a></nav>
-<div class="note"><b>研究用・暫定的中率。</b> foF2は誤差±1 MHz以内、hmF2は±30 km以内を「的中」と定義。未観測・データ欠損は母数に入れません。値はIRI気候モデルの基準推定であり、SWIFT-TEC補正後の各層予報精度ではありません。履歴は導入後に蓄積される365日間のローリング保存です。</div>
+<p>事前発表したIRI気候モデルのfoF2・hmF2と、TEC連動foF2の実験的予報を、後から取得したイオノゾンデ観測で検証します。</p>
+<nav><a href="#tec-compare">TEC連動foF2比較</a><a href="./skill.html">直近の予報照合</a><a href="./ionosonde.html">観測とIRI</a><a href="./ionosphere.html">全球モデル</a><a href="./quality.html">品質管理</a><a href="./year_daily.csv">日別CSV</a><a href="./year_monthly.csv">月別CSV</a></nav>
+<div class="note"><b>研究用・暫定的中率。</b> foF2は誤差±1 MHz以内、hmF2は±30 km以内を「的中」と定義。未観測・データ欠損は母数に入れません。この上段の成績は従来のIRI単独気候モデルで、新しいTEC連動のfoF2比較は下段に表示します。両者で発表時刻や評価母数が異なるため、上段と下段の的中率をそのまま差し引かないでください。履歴は導入後に365日間蓄積されます。</div>
 <p id="status">データ読み込み中…</p>
 <fieldset><label>予報リードタイム<select id="horizon"><option value="1">1時間</option><option value="3">3時間</option><option value="6">6時間</option><option value="12">12時間</option><option value="24">24時間</option></select></label><label>評価項目<select id="metric"><option value="fof2">foF2（MHz）</option><option value="hmf2">hmF2（km）</option></select></label><label>期間<select id="period"><option value="30">直近30日</option><option value="90">直近90日</option><option value="365">365日</option></select></label></fieldset>
 <div class="cards"><div class="card"><b id="hit">—</b><small>的中率</small></div><div class="card"><b id="count">—</b><small>評価済みペア</small></div><div class="card"><b id="mae">—</b><small>MAE</small></div><div class="card"><b id="bias">—</b><small>Bias（IRI−観測）</small></div></div>
 <section class="panel"><h2>日別的中率の推移</h2><p class="small">点はその日の有効ペアが1件以上あった場合にのみ表示。データがない日の値を0%にはしません。</p><svg id="chart" viewBox="0 0 900 285" role="img" aria-label="Daily hit rate history"></svg></section>
 <section class="panel"><h2>月別集計</h2><div class="scroll"><table><thead><tr><th>月（UTC）</th><th>有効ペア</th><th>的中</th><th>的中率</th><th>MAE</th><th>RMSE</th><th>Bias</th></tr></thead><tbody id="months"></tbody></table></div></section>
+
+<section class="panel" id="tec-compare">
+<h2>SWIFT-TEC連動foF2の365日精度比較（同一観測ペア）</h2>
+<p class="small">この比較では、<b>同じ発表時刻・地点・有効時刻・観測</b>からIRI基準とTEC連動シナリオを評価します。TEC補正が成立しなかった地点は双方の比較母数から除外します。上の「予報リードタイム」「期間」を共有しますが、<b>評価項目はfoF2のみ</b>です。</p>
+<p class="small" id="tecStatus">TEC連動モデルの履歴を読み込み中…</p>
+<div class="cards">
+<div class="card"><b id="tecIriHit">—</b><small>IRI基準の的中率（ペア限定）</small></div>
+<div class="card"><b id="tecLinkedHit">—</b><small>TEC連動の的中率（ペア限定）</small></div>
+<div class="card"><b id="tecGain">—</b><small>差（TEC − IRI、％ポイント）</small></div>
+<div class="card"><b id="tecCount">—</b><small>同一観測で評価できたペア数</small></div>
+</div>
+<div class="cards">
+<div class="card"><b id="tecCoverage">—</b><small>TEC補正成立率（IRI照合内）</small></div>
+<div class="card"><b id="tecIriMae">—</b><small>IRIのMAE（ペア限定）</small></div>
+<div class="card"><b id="tecLinkedMae">—</b><small>TECのMAE（ペア限定）</small></div>
+<div class="card"><b id="tecAllCount">—</b><small>TEC未成立も含むIRI照合件数</small></div>
+</div>
+<svg id="tecChart" viewBox="0 0 900 280" role="img" aria-label="TEC-linked foF2 forecast versus same-issue IRI baseline daily hit rates" style="width:100%;height:auto;max-height:285px;background:#0b2136;border-radius:9px"></svg>
+<p class="small">グラフ凡例：<span style="color:#76d9f0">━━ IRI基準（ペア限定）</span> ／ <span style="color:#ffc16c">━━ TEC連動</span>。観測のない日は点や線を描かず、0％とは扱いません。どちらもfoF2誤差±1MHz以内を的中と定義します。</p>
+<h3>月別比較（全期間）</h3><div class="scroll"><table><thead><tr><th>月（UTC）</th><th>評価ペア</th><th>IRI的中率</th><th>TEC的中率</th><th>差（pp）</th><th>IRI MAE</th><th>TEC MAE</th></tr></thead><tbody id="tecMonths"></tbody></table></div>
+<p><a href="./tec_skill_daily.csv">TEC連動・日別CSV</a> ／ <a href="./tec_skill_monthly.csv">TEC連動・月別CSV</a> ／ <a href="./tec_skill.json">TEC連動・365日JSON</a></p>
+<p class="small">これらは将来発表値の事後比較であり、機械学習の補正効果や実運用の通信・航法可用性を保証しません。foF2補正はIRIの高度別Neを制限付きで一様倍率補正した感度シナリオです。hmF2はTEC補正していません。欠測は比較母数に入れません。</p>
+</section>
 <section class="panel"><h2>集計・出典</h2><p class="small" id="meta"></p><p class="small">データ出典：KC2G集約のGIRO/INGV由来イオノゾンデ。非商用研究用。原観測局の謝辞・再配布条件に従ってください。1観測・同一リードタイムにつき重複は1件に統一します。履歴ブランチでの365日保存はアクティブファイルを対象とし、削除前のGitコミットには古い内容が残る場合があります。</p><p><a href="./year_accuracy.json">機械可読JSON</a> ／ <a href="https://giro.uml.edu/didbase/RulesOfTheRoad.html">GIRO利用条件</a></p></section>
 </main><script>
 'use strict';const $=x=>document.getElementById(x);let payload=null;
@@ -38,4 +61,55 @@ function render(){if(!payload)return;const horizon=$('horizon').value,metric=$('
  const monthly=payload.monthly.filter(x=>String(x.horizon_h)===horizon).slice().reverse();const body=$('months');body.replaceChildren();for(const row of monthly){const s=row.summary[metric],tr=body.insertRow();const values=[row.month_utc,s.sample_count,s.hit_count,s.hit_rate_percent==null?'—':fmt(s.hit_rate_percent)+'%',fmt(s.mae),fmt(s.rmse),fmt(s.bias)];for(const v of values){const td=tr.insertCell();td.textContent=String(v)}}}
 for(const id of ['horizon','metric','period'])$(id).addEventListener('change',render);
 fetch('./year_accuracy.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('year_accuracy.json HTTP '+r.status);return r.json()}).then(data=>{payload=data;const m=data.metadata||{};$('status').textContent=`状態: ${data.status} | 評価済み照合 ${data.total_matches}件 | 観測あり ${data.unique_observation_days_with_matches}日 | 保存対象 ${m.window_start_utc} 〜 ${m.window_end_utc}`;$('meta').textContent=`生成: ${m.generated_at} ／ 保存日数: ${m.retention_days} ／ 出典: ${m.source_license} ／ 全リードタイムの合算は独立な母数ではありません。`;render()}).catch(e=>{$('status').className='error';$('status').textContent='年次履歴の読み込みに失敗: '+e.message+'。GitHub ActionsのRecord prospective... / Commit 365-day history を確認してください。'});
+
+// Independent prospective TEC-linked foF2 comparison; never changes the old IRI history.
+let tecPayload=null;
+function tecRollup(rows){
+ const result={pairN:0,iriHits:0,tecHits:0,iriAbs:0,tecAbs:0,iriAll:0};
+ for(const row of rows){const s=row.summary||{},a=s.paired_iri||{},b=s.paired_tec||{};
+  const n=Number(s.paired_count)||0;
+  result.pairN+=n;result.iriAll+=Number(s.iri_all?.sample_count)||0;
+  result.iriHits+=Number(a.hit_count)||0;result.tecHits+=Number(b.hit_count)||0;
+  if(n>0&&Number.isFinite(a.mae)&&Number.isFinite(b.mae)){result.iriAbs+=a.mae*n;result.tecAbs+=b.mae*n;}
+ }
+ return result;
+}
+function tecRender(){if(!tecPayload)return;
+ const h=String($('horizon').value),period=Number($('period').value);
+ const days=tecPayload.daily.filter(x=>String(x.horizon_h)===h).slice(-period);
+ const r=tecRollup(days);
+ const a=r.pairN?100*r.iriHits/r.pairN:null,b=r.pairN?100*r.tecHits/r.pairN:null;
+ $('tecIriHit').textContent=a==null?'—':fmt(a)+'%';
+ $('tecLinkedHit').textContent=b==null?'—':fmt(b)+'%';
+ $('tecGain').textContent=a==null?'—':fmt(b-a)+' pp';
+ $('tecCount').textContent=fmt(r.pairN,0);
+ $('tecAllCount').textContent=fmt(r.iriAll,0);
+ $('tecCoverage').textContent=r.iriAll?fmt(100*r.pairN/r.iriAll)+'%':'—';
+ $('tecIriMae').textContent=r.pairN?fmt(r.iriAbs/r.pairN)+' MHz':'—';
+ $('tecLinkedMae').textContent=r.pairN?fmt(r.tecAbs/r.pairN)+' MHz':'—';
+ const svg=$('tecChart');svg.replaceChildren();const L=55,R=875,T=15,B=245;
+ for(let step=0;step<=4;step++){const v=step*25,y=B-v/100*(B-T);svg.append(S('line',{x1:L,x2:R,y1:y,y2:y,stroke:'#385772'}));svg.append(S('text',{x:L-8,y:y+4,'text-anchor':'end',fill:'#bfd7ea','font-size':12},v+'%'));}
+ for(const [key,color] of [['paired_iri','#76d9f0'],['paired_tec','#ffc16c']]){
+  let prev=null;
+  days.forEach((row,i)=>{const m=row.summary?.[key],v=m?.hit_rate_percent;if(typeof v!=='number'){prev=null;return;}
+   const x=L+(R-L)*(i+.5)/Math.max(1,days.length),y=B-v/100*(B-T);
+   if(prev)svg.append(S('line',{x1:prev.x,x2:x,y1:prev.y,y2:y,stroke:color,'stroke-width':2}));
+   const dot=S('circle',{cx:x,cy:y,r:2.8,fill:color});dot.append(S('title',{},`${row.day_utc} ${key}: ${fmt(v)}% (${m.sample_count}件)`));svg.append(dot);prev={x,y};
+  });
+ }
+ svg.append(S('text',{x:L,y:267,fill:'#b9ccd9','font-size':12},days[0]?.day_utc||'—'));
+ svg.append(S('text',{x:R,y:267,fill:'#b9ccd9','font-size':12,'text-anchor':'end'},days.at(-1)?.day_utc||'—'));
+ const body=$('tecMonths');body.replaceChildren();
+ for(const row of tecPayload.monthly.filter(x=>String(x.horizon_h)===h).slice().reverse()){
+  const s=row.summary,a=s.paired_iri||{},b=s.paired_tec||{};
+  const cells=[row.month_utc,s.paired_count,a.hit_rate_percent==null?'—':fmt(a.hit_rate_percent)+'%',b.hit_rate_percent==null?'—':fmt(b.hit_rate_percent)+'%',s.hit_rate_gain_pp==null?'—':fmt(s.hit_rate_gain_pp),fmt(a.mae),fmt(b.mae)];
+  const tr=body.insertRow();for(const val of cells)tr.insertCell().textContent=String(val);
+ }
+}
+for(const id of ['horizon','period'])$(id).addEventListener('change',tecRender);
+fetch('./tec_skill.json',{cache:'no-store'})
+ .then(r=>{if(!r.ok)throw Error('tec_skill.json HTTP '+r.status);return r.json()})
+ .then(data=>{if(data.schema!=='swift-ion-tec-fof2-skill-365-v1')throw Error('不正なTEC履歴形式');tecPayload=data;
+  $('tecStatus').textContent=`状態: ${data.status} ｜ 記録照合 ${data.total_matches}件 ｜ 保存期間 ${data.metadata.window_start_utc}〜${data.metadata.window_end_utc} ｜ 新規発表: ${data.archive?.new_snapshot_issued?'あり':'なし'}`;tecRender();})
+ .catch(e=>{$('tecStatus').className='small error';$('tecStatus').textContent='TEC連動の履歴はまだ生成されていません: '+e.message+'。新しいworkflowが成功すると、今後の観測から蓄積します。'});
 </script></body></html>
