@@ -2,18 +2,18 @@
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#081729"><title>SWIFT-ION | NICT 4地点 foF2予報・観測比較</title>
 <style>
 :root{color-scheme:dark;--bg:#071728;--panel:#11293c;--panel2:#0b2133;--line:#294d66;--fg:#e7f3ff;--muted:#abc7d9;--cyan:#6bd8ee;--gold:#f9c677;--good:#8ddcb9}*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 system-ui,-apple-system,'Segoe UI',sans-serif}a{color:#8ee1ff}header{padding:28px clamp(14px,4vw,52px);background:linear-gradient(130deg,#13425c,#081b2d 65%);border-bottom:1px solid var(--line)}header h1{margin:2px 0 7px;font-size:27px}header p{margin:0;color:#c0d8e7;max-width:1050px}nav{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;font-size:13px}.wrap{max-width:1560px;margin:auto;padding:20px clamp(12px,3vw,40px) 40px}.controls{display:flex;gap:12px;flex-wrap:wrap;align-items:end;background:#0d293f;border:1px solid var(--line);border-radius:12px;padding:15px}label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#bfd9e9}button,select,input{padding:8px 11px;border:1px solid #467089;border-radius:8px;background:#143850;color:#eaf6ff;font:inherit;cursor:pointer}button:hover{background:#22607a}.action{background:#117892;font-weight:700}.status{margin:12px 0;color:#b7d7e8;background:#0d293f;padding:11px 15px;border:1px solid var(--line);border-radius:9px;white-space:pre-wrap}.warn{color:#ffdb9e;border-left:3px solid #a88552;padding:11px;background:#292c32;margin:12px 0;font-size:12px}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}.card,.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px}.card b{display:block;font-size:22px}.card span{font-size:11px;color:var(--muted)}.graphs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.panel h2{font-size:16px;margin:0 0 5px}.meta{color:#aacae0;font-size:12px}.panel canvas{width:100%;height:285px;cursor:crosshair;display:block;border-radius:8px;background:#071d2e}.legend{display:flex;gap:20px;flex-wrap:wrap;color:#bcd5e6;font-size:11px;margin:6px 0}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}.tablebox{overflow:auto;background:#0b2133;border-radius:12px;border:1px solid var(--line);margin-top:16px;padding:12px}table{border-collapse:collapse;width:100%;min-width:650px}th,td{text-align:left;border-bottom:1px solid #294455;padding:8px 10px;font-size:12px}th{background:#153b52}small{color:#b7cbda}.info{display:flex;gap:20px;flex-wrap:wrap;font-size:12px;margin:10px 0}.examples{background:#091e2c;padding:12px;border-radius:10px;border:1px solid var(--line);overflow:auto}code{color:#a0eacb}#error{color:#ffc28b}.foot{font-size:11px;color:#9ebdce;margin-top:25px}@media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr)}.graphs{grid-template-columns:1fr}}@media(max-width:540px){header h1{font-size:22px}.card b{font-size:18px}}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 system-ui,-apple-system,'Segoe UI',sans-serif}a{color:#8ee1ff}header{padding:28px clamp(14px,4vw,52px);background:linear-gradient(130deg,#13425c,#081b2d 65%);border-bottom:1px solid var(--line)}header h1{margin:2px 0 7px;font-size:27px}header p{margin:0;color:#c0d8e7;max-width:1050px}nav{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;font-size:13px}.wrap{max-width:1560px;margin:auto;padding:20px clamp(12px,3vw,40px) 40px}.controls{display:flex;gap:12px;flex-wrap:wrap;align-items:end;background:#0d293f;border:1px solid var(--line);border-radius:12px;padding:15px}label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#bfd9e9}button,select,input{padding:8px 11px;border:1px solid #467089;border-radius:8px;background:#143850;color:#eaf6ff;font:inherit;cursor:pointer}button:hover{background:#22607a}.action{background:#117892;font-weight:700}.status{margin:12px 0;color:#b7d7e8;background:#0d293f;padding:11px 15px;border:1px solid var(--line);border-radius:9px;white-space:pre-wrap}.warn{color:#ffdb9e;border-left:3px solid #a88552;padding:11px;background:#292c32;margin:12px 0;font-size:12px}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}.card,.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px}.card b{display:block;font-size:22px}.card span{font-size:11px;color:var(--muted)}.graphs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.panel h2{font-size:16px;margin:0 0 5px}.meta{color:#aacae0;font-size:12px}.panel canvas{width:100%;height:335px;cursor:crosshair;display:block;border-radius:8px;background:#071d2e}.legend{display:flex;gap:20px;flex-wrap:wrap;color:#bcd5e6;font-size:11px;margin:6px 0}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}.tablebox{overflow:auto;background:#0b2133;border-radius:12px;border:1px solid var(--line);margin-top:16px;padding:12px}table{border-collapse:collapse;width:100%;min-width:650px}th,td{text-align:left;border-bottom:1px solid #294455;padding:8px 10px;font-size:12px}th{background:#153b52}small{color:#b7cbda}.info{display:flex;gap:20px;flex-wrap:wrap;font-size:12px;margin:10px 0}.examples{background:#091e2c;padding:12px;border-radius:10px;border:1px solid var(--line);overflow:auto}code{color:#a0eacb}#error{color:#ffc28b}.foot{font-size:11px;color:#9ebdce;margin-top:25px}@media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr)}.graphs{grid-template-columns:1fr}}@media(max-width:540px){header h1{font-size:22px}.card b{font-size:18px}}
 </style></head><body>
 <header><div style="color:#8fc4e0;font-size:11px;letter-spacing:.12em">SWIFT-ION / SCIENTIFIC VALIDATION</div><h1>NICT 4地点｜foF2予報・観測比較</h1><p>稚内・国分寺・山川・沖縄の4観測所について、SWIFT-IONの同一UTC時刻のfoF2予報を比較。NICT公開データの数値CSVを読み込むと観測値・誤差も重ね合わせます。</p><nav><a href="./index.html">← ホーム</a><a href="./field.html">foF2動画</a><a href="./route.html">飛行経路動画</a><a href="./route_excel.html">経路Excel分析</a><a href="https://wdc.nict.go.jp/Ionosphere/en/" target="_blank" rel="noopener">NICT公式観測ページ</a><a href="https://wdc.nict.go.jp/Ionosphere/en/archive/" target="_blank" rel="noopener">NICT数値アーカイブ</a></nav></header>
 <main class="wrap">
 <section class="controls">
  <label>予報の種類<select id="variant"><option value="iri">IRI基準</option><option value="tec">TEC連動シナリオ（実験）</option></select></label>
- <label>表示期間<select id="window"><option value="48">直近48時間（予報データ内）</option><option value="96" selected>直近96時間（予報データ内）</option><option value="all">予報全期間</option></select></label>
- <label>横軸（UTC）目盛り<select id="axisTick"><option value="3">3時間</option><option value="6" selected>6時間</option><option value="12">12時間</option><option value="24">24時間</option></select></label>
+ <label>表示期間<select id="window"><option value="48">直近48時間（予報データ内）</option><option value="96">直近96時間（予報データ内）</option><option value="nict6" selected>NICT形式・6日間（UTC）</option><option value="all">予報全期間</option></select></label>
+ <label>横軸（UTC）補助線<select id="axisTick"><option value="3">3時間</option><option value="6" selected>6時間（NICT推奨）</option><option value="12">12時間</option><option value="24">24時間</option></select></label>
  <label>観測数値CSV<input id="csvFile" type="file" accept=".csv,text/csv"/></label>
  <button id="template">CSV雛形</button><button id="export" class="action">グラフ付きExcelに出力 (.xlsx)</button><button id="fullscreen">⛶ 全画面</button>
 </section>
-<div class="warn">重要：グラフの青線はSWIFT-IONのIRI由来の予報値で、NICTが観測した値ではありません。オレンジ色の観測線は、利用者が取り込んだCSVの値です。CSVが未読込の場合は「NICT観測：未取得」を明記します。観測時刻と予報時刻が一致しない場合は的中率を計算しません。</div>
+<div class="warn">重要：グラフの青線はSWIFT-IONのIRI由来の予報値で、NICTが観測した値ではありません。オレンジ色の観測線は、利用者が取り込んだCSVの値です。CSVが未読込の場合は「NICT観測：未取得」を明記します。観測時刻と予報時刻が一致しない場合は的中率を計算しません。NICT形式の横軸はUTCの6日間を表示しますが、現在の約5日間のSWIFT-ION予報の範囲外は空白です。</div>
 <div class="status" id="status">SWIFT-IONの予報JSONを読み込み中…</div>
 <section class="cards" id="summaries"></section>
 <section class="graphs" id="graphs"></section>
@@ -23,28 +23,43 @@ body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 system-ui,-appl
 </main>
 <script type="module">
 import {NICT_STATIONS,observationsFromCsv,extractForecast,matchForecast,stats} from './shared/nict-compare.mjs';
-import {downloadWorkbook} from './shared/xlsx-charts.mjs';import {drawAxisPlot} from './shared/axis-plots.mjs';
+import {downloadWorkbook} from './shared/xlsx-charts.mjs';import {drawAxisPlot,oneMhzBounds,sixDayUtcBounds} from './shared/axis-plots.mjs';
 const $=id=>document.getElementById(id),q={data:null,observations:[],warnings:[],forecast:[],matched:[]};const COL=['#79e1f3','#ffbe78'];
-function sectionRows(station){const all=q.matched.filter(x=>x.station===station);const hrs=$('window').value;if(hrs==='all')return all;return all.slice(-Math.round(Number(hrs)*2)-1)}
+function windowRange(){
+ const ts=q.data.frames.map(f=>Date.parse(f.valid_at)).filter(Number.isFinite);
+ if(!ts.length)throw Error('Forecast timestamps missing');
+ const first=ts[0],last=ts.at(-1),period=$('window').value;
+ if(period==='nict6'){const r=sixDayUtcBounds(first);return {min:r.start,max:r.end,description:'NICT形式・UTC 6日間'};}
+ if(period==='all')return {min:first,max:last,description:'予報全期間'};
+ const hours=Number(period);return {min:Math.max(first,last-hours*3600000),max:last,description:`直近${hours}時間`};
+}
+function sectionRows(station){
+ const {min,max}=windowRange();return q.matched.filter(r=>r.station===station&&r.ms>=min&&r.ms<=max);
+}
 function f(n,d=2){return n===null||!Number.isFinite(n)?'—':n.toFixed(d)}
 function canvasPlot(canvas,rows,label){
- const tmin=rows[0]?.ms||0,tmax=rows.at(-1)?.ms||tmin+3600000;
+ const wr=windowRange(),tmin=wr.min,tmax=wr.max;
  const hours=Number($('axisTick').value),step=hours*3600000;
- drawAxisPlot(canvas,[
+ const series=[
    {name:'SWIFT-ION予報',color:COL[0],points:rows.map(r=>({x:r.ms,y:r.model_mhz}))},
    {name:'NICT CSV観測',color:COL[1],points:rows.map(r=>({x:r.ms,y:r.observed_mhz}))}
- ],{kind:'time',xMin:tmin,xMax:tmax,step,title:label,valueUnit:'MHz'});
+ ];
+ const y=oneMhzBounds(series.flatMap(s=>s.points.map(p=>p.y)));
+ canvas.style.height=`${Math.max(335,(y.max-y.min)*28+103)}px`;
+ drawAxisPlot(canvas,series,{kind:'time',timeStyle:'nict',xMin:tmin,xMax:tmax,step,
+   yMin:y.min,yMax:y.max,yStep:1,title:label,valueUnit:'MHz'});
+ return y;
 }
 function render(){if(!q.data)return;q.forecast=extractForecast(q.data,$('variant').value);q.matched=matchForecast(q.forecast,q.observations);
  $('graphs').innerHTML='';$('summaries').innerHTML='';$('body').innerHTML='';
  for(const st of NICT_STATIONS){const forecasts=q.forecast.filter(x=>x.station===st.id),observations=q.observations.filter(x=>x.station===st.id&&x.fof2_mhz!==null),rows=sectionRows(st.id),result=stats(q.matched.filter(x=>x.station===st.id));
   const card=document.createElement('div');card.className='card';const last=rows.filter(x=>x.model_mhz!==null).at(-1)?.model_mhz??null;card.innerHTML=`<b>${f(last)} <small>MHz</small></b><span>${st.name}｜最新予報foF2</span><br><span>${result.n ? '観測一致 '+result.n+'件｜MAE '+f(result.mae)+' MHz' : 'NICT観測との一致なし'}</span>`;$('summaries').appendChild(card);
   const panel=document.createElement('div');panel.className='panel';const title=document.createElement('h2');title.textContent=st.name;panel.appendChild(title);const mt=document.createElement('div');mt.className='meta';mt.textContent=`${st.lat.toFixed(2)}°N, ${st.lon.toFixed(2)}°E | 予報 ${forecasts.filter(x=>x.model_mhz!==null).length}点 | 観測CSV ${observations.length}点`;panel.appendChild(mt);const lg=document.createElement('div');lg.className='legend';lg.innerHTML=`<span><i class="dot" style="background:${COL[0]}"></i>SWIFT-ION予報</span><span><i class="dot" style="background:${COL[1]}"></i>取り込み観測</span><span>${result.n?'誤差計算あり':'時刻一致データなし'}</span>`;panel.appendChild(lg);
-  const cv=document.createElement('canvas');panel.appendChild(cv);$('graphs').appendChild(panel);canvasPlot(cv,rows,'foF2 (MHz)');
+  const cv=document.createElement('canvas');panel.appendChild(cv);$('graphs').appendChild(panel);const yAxis=canvasPlot(cv,rows,'foF2 (MHz)');const axisNote=document.createElement('div');axisNote.className='meta';axisNote.textContent=`縦軸 ${yAxis.available?`${yAxis.min}～${yAxis.max} MHz`:'値なし'}（1 MHz刻み）｜${windowRange().description}｜横軸UTC`;panel.appendChild(axisNote);
   const tr=document.createElement('tr');tr.innerHTML=`<td>${st.name}</td><td>${st.lat.toFixed(2)}, ${st.lon.toFixed(2)}</td><td>${forecasts.filter(x=>x.model_mhz!==null).length}</td><td>${observations.length}</td><td>${result.n}</td><td>${f(result.mae)}</td><td>${f(result.bias)}</td>`;$('body').appendChild(tr);
  }
  const obsTotal=q.observations.filter(x=>x.fof2_mhz!==null).length;const nMatched=q.matched.filter(x=>x.error_mhz!==null).length;const issued=q.data.metadata?.issued_at||'—';
- $('status').textContent=`予報: ${q.data.frames.length}フレーム (30分) ・発表 ${issued} ・モデル ${$('variant').value==='iri'?'IRI基準':'TEC連動実験シナリオ'}\n観測CSV: ${obsTotal}件（出典は利用者入力）・時刻一致: ${nMatched}件（±15分）${q.warnings.length?' ・ 読込警告: '+q.warnings.slice(0,3).join(' / '):''}`;
+ $('status').textContent=`予報: ${q.data.frames.length}フレーム (30分) ・発表 ${issued} ・モデル ${$('variant').value==='iri'?'IRI基準':'TEC連動実験シナリオ'}\n横軸: ${windowRange().description}・縦軸: 表示期間内の最小～最大を1 MHz刻み。予報未公開時刻は空白。\n観測CSV: ${obsTotal}件（出典は利用者入力）・時刻一致: ${nMatched}件（±15分）${q.warnings.length?' ・ 読込警告: '+q.warnings.slice(0,3).join(' / '):''}`;
 }
 async function init(){try{const r=await fetch('./ion_forecast.json',{cache:'no-store'});if(!r.ok)throw Error('ion_forecast.json HTTP '+r.status);q.data=await r.json();if(q.data.schema!=='swift-ion-iri-tec-forecast-v1'||!q.data.frames?.length)throw Error(q.data.status||'予報が未生成');render();}catch(e){$('status').textContent='予報を読み込めません: '+e.message;}}
 $('variant').onchange=render;$('window').onchange=render;$('axisTick').onchange=render;window.addEventListener('resize',()=>{if(q.data)render()});

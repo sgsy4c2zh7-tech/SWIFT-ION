@@ -5,6 +5,25 @@ export function tickValues(min,max,step){
  for(let value=first;value<=max+1e-8*step&&out.length<1000;value+=step)out.push(Math.round(value*1e6)/1e6 || 0);
  return out;
 }
+/** Display bounds snapped to EVERY integer MHz, from values within the visible window.
+ * Missing values must not affect the axis; no fabricated measurements.
+ */
+export function oneMhzBounds(values){
+ const nums=values.filter(Number.isFinite);
+ if(!nums.length)return {min:0,max:1,available:false};
+ let min=Math.floor(Math.min(...nums)),max=Math.ceil(Math.max(...nums));
+ if(max<=min){min=Math.max(0,min-1);max=min+2;}
+ return {min,max,available:true};
+}
+/** NICT-style six UTC calendar days, aligned to midnight for comparable day labels.
+ * The forecast may be shorter; the rest is deliberately BLANK.
+ */
+export function sixDayUtcBounds(firstValidMs){
+ if(!Number.isFinite(firstValidMs))throw Error('First forecast UTC is invalid');
+ const dayMs=86400000;
+ const start=Math.floor(firstValidMs/dayMs)*dayMs;
+ return {start,end:start+6*dayMs};
+}
 const chartState=new WeakMap();
 function formatTime(x,span){let date=new Date(x);if(!Number.isFinite(date.valueOf()))return '—';
  const hh=String(date.getUTCHours()).padStart(2,'0'),mm=String(date.getUTCMinutes()).padStart(2,'0');
@@ -27,22 +46,62 @@ export function drawAxisPlot(canvas,series,opts={}){
  const values=series.flatMap(s=>s.points.map(p=>p.y)).filter(Number.isFinite);
  const ymax=Number(opts.yMax??Math.max(8,Math.ceil(Math.max(...values,8)/2)*2));
  const ymin=Number(opts.yMin??0), xlo=Number.isFinite(xmin)?xmin:0, xhi=xmax>xlo?xmax:xlo+1;
- const left=51,right=w-16,top=22,bottom=h-61;
+ const nictStyle=opts.kind==='time'&&opts.timeStyle==='nict';
+ const left=51,right=w-16,top=22,bottom=h-(nictStyle?80:61);
  ctx.fillStyle='#081c2c';ctx.fillRect(0,0,w,h);
  const xp=x=>left+(x-xlo)/(xhi-xlo)*(right-left),yp=y=>bottom-(y-ymin)/(ymax-ymin)*(bottom-top);
  const requested=Number(opts.step??(xhi-xlo)/6);
  let step=requested;while((xhi-xlo)/step>(right-left)/Math.max(40,opts.kind==='time'?56:30))step*=2;
  const ticks=tickValues(xlo,xhi,step);
  ctx.font='10px system-ui';
- for(let n=0;n<=5;n++){
-   const y=top+(bottom-top)*n/5;
-   ctx.strokeStyle='#234960';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(right,y);ctx.stroke();
-   ctx.fillStyle='#bcd4e5';ctx.textAlign='right';ctx.fillText((ymax-(ymax-ymin)*n/5).toFixed(1),left-7,y+3);
+ const yStep=Number(opts.yStep);
+ if(Number.isFinite(yStep)&&yStep>0){
+   // Every 1 MHz must be visible; caller gives canvas enough vertical height.
+   for(const yValue of tickValues(ymin,ymax,yStep)){
+     const y=yp(yValue);
+     ctx.strokeStyle='#234960';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(right,y);ctx.stroke();
+     ctx.fillStyle='#c7dcec';ctx.textAlign='right';ctx.font='11px system-ui';
+     ctx.fillText(Number.isInteger(yValue)?String(yValue):String(yValue),left-7,y+4);
+   }
+ }else{
+   for(let n=0;n<=5;n++){
+     const y=top+(bottom-top)*n/5;
+     ctx.strokeStyle='#234960';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(right,y);ctx.stroke();
+     ctx.fillStyle='#bcd4e5';ctx.textAlign='right';ctx.fillText((ymax-(ymax-ymin)*n/5).toFixed(1),left-7,y+3);
+   }
  }
  ctx.textAlign='center';
- for(const t of ticks){const x=xp(t);if(x<left-1||x>right+1)continue;
-   ctx.strokeStyle='#234960aa';ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,bottom);ctx.stroke();
-   ctx.fillStyle='#bad7e9';ctx.save();ctx.translate(x,bottom+11);ctx.rotate(-Math.PI/5);ctx.textAlign='right';ctx.fillText(labelFor(t,opts,xhi-xlo),0,0);ctx.restore();
+ if(nictStyle){
+   // Dates centered under each UTC day, plus 6-hour gridlines (major at 00 UTC).
+   const hourMs=3600000,dayMs=86400000,base=Math.floor(xlo/dayMs)*dayMs;
+   const labelEveryHours=(right-left)/((xhi-xlo)/(6*hourMs))>=42?6:
+     (right-left)/((xhi-xlo)/(12*hourMs))>=32?12:24;
+   const nictStep=Number(opts.step)>0?Number(opts.step):6*hourMs;
+   for(let x=base;x<=xhi+1;x+=nictStep){
+     if(x<xlo-1||x>xhi+1)continue;
+     const xPx=xp(x),date=new Date(x),hour=date.getUTCHours();
+     const midnight=hour===0;
+     ctx.strokeStyle=midnight?'#4a769a':'#2d5068';ctx.lineWidth=midnight?1.2:0.7;
+     ctx.beginPath();ctx.moveTo(xPx,top);ctx.lineTo(xPx,bottom);ctx.stroke();
+     if(hour%labelEveryHours===0){
+       ctx.fillStyle='#bed8e9';ctx.textAlign='center';ctx.font='10px system-ui';
+       ctx.fillText(String(hour).padStart(2,'0'),xPx,bottom+15);
+     }
+   }
+   for(let day=base;day<xhi;day+=dayMs){
+     const middle=Math.max(xlo,day)+(Math.min(xhi,day+dayMs)-Math.max(xlo,day))/2;
+     if(middle<xlo||middle>xhi)continue;
+     const d=new Date(day),date=`${String(d.getUTCMonth()+1).padStart(2,'0')}/${String(d.getUTCDate()).padStart(2,'0')}`;
+     ctx.fillStyle='#9fe4fa';ctx.textAlign='center';ctx.font='11px system-ui';
+     ctx.fillText(date,xp(middle),bottom+34);
+   }
+   ctx.textAlign='left';ctx.fillStyle='#99c1d6';ctx.font='10px system-ui';
+   ctx.fillText('UTC 00 / 06 / 12 / 18 (6h補助線)   •   日付 MM/DD',left,h-15);
+ }else{
+   for(const t of ticks){const x=xp(t);if(x<left-1||x>right+1)continue;
+     ctx.strokeStyle='#234960aa';ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,bottom);ctx.stroke();
+     ctx.fillStyle='#bad7e9';ctx.save();ctx.translate(x,bottom+11);ctx.rotate(-Math.PI/5);ctx.textAlign='right';ctx.fillText(labelFor(t,opts,xhi-xlo),0,0);ctx.restore();
+   }
  }
  ctx.strokeStyle='#587b93';ctx.strokeRect(left,top,right-left,bottom-top);
  for(const s of series){ctx.lineWidth=2.4;ctx.strokeStyle=s.color||'#76e0ed';ctx.beginPath();let open=false;
