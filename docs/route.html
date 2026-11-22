@@ -19,6 +19,16 @@ button{cursor:pointer}button:disabled{opacity:.45;cursor:default}.primary{backgr
 #routeText{font:12px/1.5 ui-monospace,monospace;width:min(240px,100%);min-height:70px;resize:vertical}
 .ramp{height:10px;margin:6px 0 0;background:linear-gradient(90deg,#0d1b55,#255bc0,#28aadb,#31d1ab,#e3e767,#ff9b28,#c8283d);border-radius:8px}
 @media(max-width:930px){.view,.bottom{grid-template-columns:1fr}.panel canvas{height:300px;min-height:260px}.info{grid-template-columns:repeat(2,1fr)}}
+/* Interactive map route controls */
+.route-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+.route-tools button{min-height:37px}.route-tools .editor-active{background:#087f99;border-color:#72e3f1}
+.route-tools .route-help{color:#a6d7e7;font-size:12px;flex:1}
+.swift-waypoint-list{display:flex;gap:6px;flex-wrap:wrap;padding:8px;background:#0b2436;border-radius:8px;margin:7px 0}
+.swift-waypoint-item{display:flex;align-items:center;gap:5px;background:#0f354c;border:1px solid #31566e;padding:3px 6px;border-radius:7px}
+.swift-waypoint-item span{font:11px ui-monospace,Consolas,monospace}
+.swift-waypoint-item button{padding:2px 7px;font-size:11px}
+.swift-route-marker{border:0;background:transparent}.swift-route-marker span{display:grid;place-items:center;width:29px;height:29px;border:2px solid #e8faff;border-radius:50%;background:#157c98;color:white;font:800 13px system-ui;cursor:grab;box-shadow:0 3px 8px #0008}
+#map.swift-add-mode{cursor:crosshair!important}
 </style></head><body>
 <header><h1>SWIFT-ION <span style="color:var(--hi)">foF2 Flight Route Forecast</span></h1>
 <nav><a href="./index.html">ホーム</a><a href="./field.html">foF2全球アニメーション</a><a href="./explorer.html">GAIA 3D・多層</a><a href="./animate.html">VTEC動画</a><a href="./year.html">365日的中率</a></nav></header>
@@ -37,6 +47,8 @@ button{cursor:pointer}button:disabled{opacity:.45;cursor:default}.primary{backgr
 <div id="workspace">
 <div class="notice">本画面は公開都市・架空経路を対象にした研究モデルの可視化。<b>foF2はF2層の臨界周波数であり、航空通信の最適周波数／MUF／通信可否を直接示しません。</b> IRIの将来時刻における気候モデル推定と、TEC一様倍率感度シナリオを切替表示します。hmF2はTECで補正しません。</div>
 <div class="timeline"><button id="play" class="primary" disabled>▶ 再生</button><button id="prev" disabled>◀</button><button id="next" disabled>▶</button><input id="seek" type="range" min="0" max="0" value="0" step="1" disabled aria-label="予報30分タイムライン"><span id="time">— UTC</span><button id="fullscreen">⛶ 全画面</button></div>
+<div class="route-tools"><button id="modeView" class="editor-active" type="button">↔ 地図を移動</button><button id="modeAdd" type="button">＋ タップで追加</button><button id="modeInsert" type="button">◇ 経路に挿入</button><button id="routeClear" type="button">経由点を消去</button><button id="routeFit" type="button">経路全体を表示</button><span id="routeHelp" class="route-help">経路のピンをドラッグして移動。地図はスワイプできます。</span></div>
+<div id="waypointList" class="swift-waypoint-list" aria-label="経由点の順序・削除"></div>
 <div class="view">
   <div class="panel"><h2>経路と地点別foF2（背景の地図は地理情報のみ）</h2><div id="map"></div></div>
   <div class="panel"><h2 id="chartTitle">経路距離 × foF2予報 [MHz]</h2><canvas id="profile"></canvas></div>
@@ -52,8 +64,9 @@ button{cursor:pointer}button:disabled{opacity:.45;cursor:default}.primary{backgr
 <script type="module">
 import {parseRoute,valid,rgba,clamp} from './shared/gaia3d.mjs';
 import {PRESET_ROUTES,profileAlongRoute,routeSummary,computeRoute,sampleSpacetime} from './shared/route-forecast.mjs';
+import {createRouteMapEditor,parsePoints} from './shared/route-map-editor.mjs';
 const $=id=>document.getElementById(id);
-const p={data:null,route:PRESET_ROUTES['tokyo-naha'],i:0,timer:null,map:null,track:null,segments:[],markers:[],samples:[],curtain:[]};
+const p={data:null,route:PRESET_ROUTES['tokyo-naha'],i:0,timer:null,map:null,track:null,segments:[],markers:[],samples:[],curtain:[],editor:null};
 function unit(){return $('metric').value==='hmf2'?'km':$('metric').value==='ne'?'log₁₀ m⁻³':'MHz'}
 function limits(){return $('metric').value==='hmf2'?[150,550]:$('metric').value==='ne'?[8,12.8]:[1,18]}
 function rgb(v,range=limits()){const t=clamp((v-range[0])/(range[1]-range[0]),0,0.9999);const a=[[11,18,75],[34,81,185],[30,156,211],[54,204,154],[181,229,82],[255,210,49],[253,115,33],[211,40,50]],x=t*(a.length-1),i=Math.floor(x),f=x-i;const c=a[i].map((z,k)=>Math.round(z*(1-f)+a[i+1][k]*f));return `rgb(${c})`}
@@ -67,11 +80,11 @@ function refreshMap(){if(!p.map)return;
  const v=p.samples;
  for(let i=1;i<v.length;i++){
   let a=v[i-1],b=v[i];const ok=valid(a.value)&&valid(b.value);
-  const poly=L.polyline([[a.lat,a.lon],[b.lat,b.lon]],{color:ok?rgb((a.value+b.value)/2):'#8297aa',weight:ok?6:3,opacity:ok?.85:.4,dashArray:ok?null:'4 5'}).addTo(p.map);
+  const poly=L.polyline([[a.lat,a.lon],[b.lat,b.lon]],{color:ok?rgb((a.value+b.value)/2):'#8297aa',weight:ok?6:3,opacity:ok?.85:.4,dashArray:ok?null:'4 5',interactive:false}).addTo(p.map);
   p.segments.push(poly)
  }
  for(const x of p.markers)p.map.removeLayer(x);p.markers=[];
- for(let i=0;i<v.length;i+=10){const s=v[i];let marker=L.circleMarker([s.lat,s.lon],{radius:5,color:'#e5f7ff',weight:1,fillColor:valid(s.value)?rgb(s.value):'#526070',fillOpacity:.95}).addTo(p.map);
+ for(let i=0;i<v.length;i+=10){const s=v[i];let marker=L.circleMarker([s.lat,s.lon],{radius:5,color:'#e5f7ff',weight:1,fillColor:valid(s.value)?rgb(s.value):'#526070',fillOpacity:.95,bubblingMouseEvents:false}).addTo(p.map);
   marker.bindTooltip(`${fmt(s.value)} ${unit()} • ${s.valid_at}`,{sticky:true});p.markers.push(marker)}
 }
 function axes(ctx,w,h,l=52,t=16,r=w-12,b=h-42){ctx.strokeStyle='#466b7d';ctx.strokeRect(l,t,r-l,b-t);return {l,t,r,b}}
@@ -79,6 +92,12 @@ function setupCanvas(id){const c=$(id),w=Math.max(320,c.clientWidth),h=Math.max(
 function drawChart(){const {ctx,w,h}=setupCanvas('profile'),z=axes(ctx,w,h),[lo,hi]=limits(),v=p.samples;
  ctx.lineWidth=1;ctx.font='11px system-ui';ctx.fillStyle='#a9cddd';
  for(let k=0;k<=4;k++){let val=lo+(hi-lo)*k/4,y=z.b-(z.b-z.t)*k/4;ctx.strokeStyle='#2e4960';ctx.beginPath();ctx.moveTo(z.l,y);ctx.lineTo(z.r,y);ctx.stroke();ctx.fillText(fmt(val,1),5,y+4)}
+ const total=v.at(-1)?.km||0,xstep=total>2600?500:(total>1400?200:100),labelStep=(w<650?2:1);
+ for(let km=0,j=0;km<=total;km+=xstep,j++){
+  const x=z.l+(z.r-z.l)*km/(total||1);ctx.strokeStyle='#28536a';ctx.lineWidth=.7;
+  ctx.beginPath();ctx.moveTo(x,z.t);ctx.lineTo(x,z.b);ctx.stroke();
+  if(j%labelStep===0){ctx.fillStyle='#bedbe9';ctx.save();ctx.translate(x,z.b+11);ctx.rotate(-Math.PI/4);ctx.fillText(km+'km',0,0);ctx.restore()}
+ }
  ctx.lineWidth=2.4;let prev=null;
  for(let i=0;i<v.length;i++){const s=v[i],x=z.l+(z.r-z.l)*i/(v.length-1);if(!valid(s.value)){prev=null;continue}
   const y=z.b-(z.b-z.t)*clamp((s.value-lo)/(hi-lo),0,1);
@@ -114,9 +133,24 @@ function draw(){if(!p.data)return;
   `有効値の割合: ${(100*st.coverage).toFixed(1)}% • ${frame.is_prospective?'発表時刻より未来':'発表時刻より前の参考再生'}。欠測は灰色。`;
  refreshMap();drawChart();drawCurtain();
 }
-function routeChanged(){try{p.route=parseRoute($('routeText').value);const outline=computeRoute(p.route);const bounds=L.latLngBounds(outline.map(x=>[x.lat,x.lon]));p.map?.fitBounds(bounds.pad(.15),{maxZoom:6});if(p.data)draw()}catch(e){$('status').textContent='経路エラー: '+e.message}}
-$('preset').onchange=()=>{const x=PRESET_ROUTES[$('preset').value];if(x){$('routeText').value=x.map(v=>v.join(',')).join('\n');routeChanged()}};
+function onEdited(points){
+ $('routeText').value=points.map(p=>p.map(v=>Number(v).toFixed(5)).join(', ')).join('\n');
+ $('preset').value='custom';stop();
+ p.route=points;
+ if(points.length<2){p.samples=[];for(const layer of [...p.segments,...p.markers])p.map?.removeLayer(layer);p.segments=[];p.markers=[];$('status').textContent='2〜12地点を地図タップで指定してください';return}
+ if(p.data)draw();
+}
+function routeChanged(){try{
+ const pts=parsePoints($('routeText').value);
+ if(p.editor)p.editor.setPoints(pts,{fit:true});else {p.route=pts;if(p.data)draw()}
+}catch(e){$('status').textContent='経路エラー: '+e.message}}
+function setEditorMode(mode){p.editor?.setMode(mode);for(const [id,m] of [['modeView','view'],['modeAdd','add'],['modeInsert','insert']])$(id).classList.toggle('editor-active',m===mode)}
+for(const [id,m] of [['modeView','view'],['modeAdd','add'],['modeInsert','insert']])$(id).onclick=()=>setEditorMode(m);
+$('routeClear').onclick=()=>{p.editor?.clear();setEditorMode('add')};
+$('routeFit').onclick=()=>{if(p.route.length>=2){const outline=computeRoute(p.route);p.map.fitBounds(L.latLngBounds(outline.map(x=>[x.lat,x.lon])).pad(.15),{maxZoom:6})}};
+$('preset').onchange=()=>{const x=PRESET_ROUTES[$('preset').value];if(x)p.editor?.setPoints(x,{fit:true})};
 $('applyRoute').onclick=routeChanged;
+$('routeText').addEventListener('change',routeChanged);
 for(const id of ['metric','variant','height','travel','duration'])$(id).onchange=()=>{if(id==='travel')$('duration').disabled=$('travel').value!=='passage';if(p.data)draw()};
 $('play').onclick=()=>p.timer?stop():start();$('prev').onclick=()=>{stop();step(-1)};$('next').onclick=()=>{stop();step(1)};
 $('seek').oninput=()=>{stop();p.i=Number($('seek').value);draw()};$('speed').onchange=()=>{if(p.timer)start()};
@@ -126,6 +160,7 @@ window.addEventListener('resize',()=>{if(p.data)draw()});window.addEventListener
 try{if(!window.L)throw Error('Leaflet が読み込めません');
  p.map=L.map('map',{worldCopyJump:true,maxZoom:8,zoomControl:true}).setView([34,135],5);
  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:8}).addTo(p.map);
+ p.editor=createRouteMapEditor({map:p.map,points:p.route,listElement:$('waypointList'),onChange:onEdited,onMessage:m=>$('routeHelp').textContent=m});setEditorMode('view');
  const path=computeRoute(p.route);p.map.fitBounds(L.latLngBounds(path.map(x=>[x.lat,x.lon])).pad(.15),{maxZoom:6});
  const res=await fetch('./ion_forecast.json',{cache:'no-store'});if(!res.ok)throw Error('ion_forecast.json HTTP '+res.status);
  const data=await res.json();if(data.schema!=='swift-ion-iri-tec-forecast-v1'||!data.frames?.length)throw Error(data.status||'予報データ未生成');

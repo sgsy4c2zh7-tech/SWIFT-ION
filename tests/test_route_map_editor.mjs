@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {parsePoints,pointsText,insertAfter,closestSegment,validatePoints,MAX_WAYPOINTS} from '../docs/shared/route-map-editor.mjs';
+const p=[[35.68,139.76],[26.21,127.68]];
+assert.deepEqual(parsePoints(pointsText(p)),p);
+assert.deepEqual(insertAfter(p,0,[34,135]),[[35.68,139.76],[34,135],[26.21,127.68]]);
+assert.equal(closestSegment([[0,0],[100,0],[100,100]],50,9),0);
+assert.equal(closestSegment([[0,0],[100,0],[100,100]],99,90),1);
+assert.deepEqual(validatePoints([[35,139]],{allowPartial:true}),[[35,139]]);
+assert.throws(()=>insertAfter(Array.from({length:MAX_WAYPOINTS},(_,i)=>[i,i]),0,[0,0]),/12/);
+assert.throws(()=>parsePoints('95,139\n26,128'),/範囲外/);
+assert.throws(()=>parsePoints('35,139\n26,abc'),/不正/);
+assert.throws(()=>parsePoints('35,139'),/2〜/);
+console.log('Interactive route editor pure-function tests passed');
