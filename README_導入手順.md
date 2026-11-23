@@ -1,80 +1,32 @@
-# SWIFT-ION / 全画面地図 + GNSS PDOP / TEC位置偏差 [m] + 等値線
+# SWIFT-ION v2 完成版（2026-11-23）
 
-## 対象（2026-11-23 に確認した公開SWIFT-ION構造）
+## 反映ファイル
+GitHub [sgsy4c2zh7-tech/SWIFT-ION](https://github.com/sgsy4c2zh7-tech/SWIFT-ION) の `main` に以下を同じパスで上書き/追加します。
 
-- リポジトリ: `sgsy4c2zh7-tech/SWIFT-ION`
-- 対象ページ: `docs/animate.html` (Global Time Animation)
-- SWIFT-TEC参照元: `_upstream_swifttec/docs/data/gnss/*_latest.tle`
-- 既存 `docs/animation/` のVTEC30分予報と再生機能は利用継続
-- **既存の `.github/workflows/pages.yml` を削除・全面上書きしない**
+1. `docs/animate.html` — Global VTEC画面の GNSS衛星群チェックボックス、HDOP/VDOP、水平方向・垂直方向・3D電離圏起因位置偏差、欠測通知、地図のみ全画面表示。
+2. `docs/shared/gnss-iono.mjs` — 任意GNSS選択対応、ENU偏差分解、DOP計算。
+3. `docs/shared/field-contour-canvas.mjs` — 地図上の等値線/値ラベル。既存v1同じファイルです。
+4. `docs/field.html` — foF2、hmF2、電子密度、VTEC画面も **地図領域だけ全画面**。時刻は右上、操作類は地図内下部。
+5. `docs/shared/field-contours.mjs` — foF2等値線の既存モジュール（旧ZIPを使っていない場合も導入できます）。
+6. `scripts/build_gnss_latest.py` — SWIFT-TECの既存最新TLEを1ファイルに集約（既存版と同じ）。
 
-## 1. ZIPのファイルをGitHubリポジトリの同じパスへ配置
+## 絶対に必要な404対策
+Pagesが公開する `docs/gnss_latest.json` は **手動登録するファイルではなくビルド生成物**です。`docs/animate.html` だけ更新しても404のままです。
 
-| ZIP内 | 動作 |
-|---|---|
-| `docs/animate.html` | 全画面地図と操作HUD・GNSS/TEC表示 |
-| `docs/shared/gnss-iono.mjs` | SGP4位置/PDOPと電離圏起因の位置偏差をメートル計算 |
-| `docs/shared/field-contour-canvas.mjs` | 欠損を跨がない等値線/等値線ラベル/数値の描画 |
-| `scripts/build_gnss_latest.py` | SWIFT-TECの最新TLEを1ファイルに変換・上書き |
-| `tests/test_gnss_latest.py` | ビルド側の単体テスト |
-| `tests/test_gnss_iono.mjs` | JS数値処理の単体チェック（任意実行） |
-| `patch_pages_workflow.py` | 既存ワークフローに1ステップだけ差し込む補助（任意） |
+`.github/workflows/pages.yml` の `Read upstream SWIFT-TEC (read-only)` の **直後**、`Calculate SWIFT-TEC VTEC forecast and 30-minute animation` の直前に、ZIP内 `WORKFLOW_追加するステップ.yml.txt` の4行を追加してください。
 
-**`docs/shared/forecast.js`、SWIFT-TEC本体、foF2のfield.html、年別ログには変更を加えません。**
+ローカルで作業する場合は、ZIP内の `patch_pages_workflow.py` をリポジトリのルートへコピーして `python patch_pages_workflow.py` を実行すれば、既存のworkflowを保持したまま自動挿入できます（既存ステップがあれば検証付きに更新）。
 
-## 2. 必須：Pagesワークフローに以下を1ステップ追加
+新しいファイル: `docs/gnss_latest.json` は **Actions実行時にSWIFT-TECから取得**され、毎回1ファイルだけ生成します。過去のTLE・過去のDOP格子・過去の推定誤差格子は保存しません。`docs/vendor/satellite.min.js` も同時に1つだけ生成します。
 
-GitHubで `.github/workflows/pages.yml` を開き、既存の
-`- name: Read upstream SWIFT-TEC (read-only)` の **直後**、
-`- name: Calculate SWIFT-TEC VTEC forecast and 30-minute animation` の **直前**に挿入：
+**Pagesでの確認:** GitHub Actions の `Build and publish SWIFT-ION` が緑色になった後、`https://sgsy4c2zh7-tech.github.io/SWIFT-ION/gnss_latest.json` にアクセスし、`schema: swift-ion-latest-gnss-v1` が表示されるか確認してください。404が残る場合はWorkflowの変更がmainへコミットされているか、Actionsの実行ログを確認してください。
 
-```yaml
-      - name: Prepare GNSS current TLE snapshot (latest only)
-        run: python scripts/build_gnss_latest.py
-```
+## 注意：科学的意味
+- 表示する水平・垂直・3Dのm値は**単周波L1換算で、未補正の電離圏遅延に起因する推定位置偏差**です。実際の受信機の測位精度、補正済み位置誤差、保証精度ではありません。
+- GPS/他群の衛星時刻バイアスは群別に推定しますが、GLONASS等の固有周波数、各群の信号遅延、受信機バイアス等を含む厳密な測位解ではありません。
+- TLEのエポックから72時間を超える時刻や衛星配置が不足する地点は**欠測**。最新TLEだけでは5日間すべての予報のDOPを信頼して再現できません。
+- 単独QZSSなど可視衛星が4機未満ではPDOP・位置偏差を出せない場合があります。
+- ヒートマップ／数値は欠測を補間して作りません。ブラウザ内キャッシュは最大2フレーム。
 
-これだけで既存の定期Pagesビルド（現行30分おき）時に、すでにクローンしているSWIFT-TECから最新のGNSS TLEと既存の`vendor/satellite.min.js`を取り込みます。
-
-ローカルでリポジトリを編集しているなら、リポジトリのルートで
-
-```bash
-python patch_pages_workflow.py
-```
-
-を1度実行すれば自動で上のステップを追加できます。同じコマンドを複数回実行しても二重挿入しません。**GitHub Web UIで編集する場合は手動で上の3行を追加してください。**
-
-## 3. GitHubのCommit message (Summary)
-
-`Add full-screen GNSS PDOP and ionospheric error contours`
-
-## 4. 画面の使い方
-
-`Global Time Animation` → `⛶ 地図を全画面`：地図だけを全画面にし、時刻を右上、再生・30分送り・速度・物理量・衛星群・スライダーを地図下側の半透明パネルに配置。Escで元の通常レイアウトへ戻ります。
-
-物理量として `VTEC` / `直前30分差` / `GNSS PDOP` / `GNSS L1電離圏起因位置偏差[m]` を選択。等値線・線ラベル・格子数値を個別に表示できます。`GPSのみ` / `GPS+QZSS` / `全5システム（実験）` が選べます。全5システムでは衛星群ごとの独立した時計オフセットを最小二乗で扱います。
-
-## 5. データ量と技術上の注意
-
-- GitHub Pagesビルドで生成するGNSSデータは **`docs/gnss_latest.json` 1ファイル** のみで、ビルドのたびに再生成・上書きします（Gitに時系列履歴をコミットしません）。
-- `docs/vendor/satellite.min.js` はSWIFT-TECに既存のSGP4ライブラリをビルド時にコピーします。新規CDN/APIキーは不要です。
-- DOP/位置偏差の30分別・日別データはファイル保存しません。閲覧中の選択フレームだけブラウザ上で計算します（メモリ内キャッシュ最大2フレーム）。
-- TLE epochから±72時間を超える場合はその衛星を使いません。古いTLEだけで形状解が不足する場合は、**地図を欠測として表示**します。
-- 単周波L1（1575.42MHz）相当の未補正電離圏一次遅延を推定します。VTECを350km薄殻で衛星方向のSTECへ変換し、幾何学行列から**位置バイアス（m）**とPDOPを計算します。
-- これは「衛星位置とVTECから予想される電離圏成分の推定値」であり、受信機の実際の総測位誤差・補正後誤差・95%精度・GNSS可用性ではありません。とくにBeiDou/GLONASS/Galileo等の異なる周波数や衛星健全性・周波数バイアスは単純化しています。
-- 欠損を跨ぐ等値線は描きません。配色と値は研究用モデルであり、観測による妥当性検証は未実施です。
-
-## 6. テスト
-
-```bash
-python -m unittest discover -s tests -v
-node tests/test_gnss_iono.mjs
-```
-
-既存の `pages.yml` のテストステップはPythonの新テストも自動で検出します。JS追加テストは上記のNodeコマンドで任意実行できます。
-
-## 7. うまく表示されない場合
-
-- GNSS項目を選んでも空白：Actionsの`Prepare GNSS current TLE snapshot`が成功しているか、`docs/gnss_latest.json`と`docs/vendor/satellite.min.js`がPages成果物にあるか確認。
-- TLEが古い：SWIFT-TEC側の`Fetch GNSS GP data`定期処理が成功しているか確認。古いTLEでは意図的に数値を表示しません。
-- `iframe`や全画面権限制限：ブラウザのFullscreen APIが有効か確認。通常画面の地図は使えます。
-- 直近のGitHub Pages公開成功まで待っても表示が変わらない場合：ブラウザ強制再読み込み（Ctrl+F5）。
+## GitHub Commit Summary
+`Fix GNSS snapshot, add constellation selection and H/V error maps, improve map fullscreen`

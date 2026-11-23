@@ -42,7 +42,7 @@ def run():
       page.wait_for_function('document.fullscreenElement === null')
       assert page.evaluate('document.getElementById("toolbar").parentElement.id')=='panel'
       assert page.evaluate('document.getElementById("seek").parentElement.id')=='panel'
-      page.locator('#mode').select_option('iono')
+      page.locator('#mode').select_option('iono_h')
       page.wait_for_function('document.getElementById("status").textContent.includes("GNSS")')
       print('Fullscreen HUD + 30-min playback + exit/restore + GNSS missing-data state PASS')
     finally:browser.close()

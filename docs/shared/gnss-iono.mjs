@@ -47,7 +47,11 @@ export function prepareSatellites(snapshot, satLib) {
 }
 
 export function propagateSnapshot(sats, satLib, at, group = 'gps', maxAgeHours = MAX_TLE_AGE_HOURS) {
-  const allowed = GNSS_GROUPS[group] || GNSS_GROUPS.gps;
+  // Accept a legacy named preset or an explicit list of individually selected systems.
+  // An empty list means no selected satellites, not an implicit GPS fallback.
+  const selected = Array.isArray(group) ? group : (GNSS_GROUPS[group] || GNSS_GROUPS.gps);
+  const allowed = selected.filter(x => GNSS_GROUPS.all.includes(x));
+  if (!allowed.length) return [];
   const date = new Date(at);
   const out = [];
   if (!Number.isFinite(date.getTime())) return out;
@@ -145,9 +149,16 @@ export function solveIonoAt(cube, frame, satellites, latDeg, lonDeg, elevMask = 
   if (!inverse) return null;
   const solution = inverse.map(row => row.reduce((sum, v, i) => sum + v * rhs[i], 0));
   const pdop = Math.sqrt(Math.max(0, inverse[0][0] + inverse[1][1] + inverse[2][2]));
-  const bias = Math.hypot(solution[0], solution[1], solution[2]);
-  if (!Number.isFinite(pdop) || pdop > 50 || !Number.isFinite(bias)) return null;
-  return { iono_bias_m: bias, pdop, visible: observed.length,
+  // ENU-position components; signed Up is retained for debugging, map uses magnitude.
+  const [east_m, north_m, up_m] = solution;
+  const horizontal_m = Math.hypot(east_m, north_m);
+  const vertical_m = Math.abs(up_m);
+  const bias = Math.hypot(east_m, north_m, up_m);
+  const hdop = Math.sqrt(Math.max(0, inverse[0][0] + inverse[1][1]));
+  const vdop = Math.sqrt(Math.max(0, inverse[2][2]));
+  if (![pdop,hdop,vdop,bias,horizontal_m,vertical_m].every(Number.isFinite) || pdop > 50) return null;
+  return { iono_bias_m: bias, iono_horizontal_m: horizontal_m, iono_vertical_m: vertical_m,
+    east_m, north_m, up_m, pdop, hdop, vdop, visible: observed.length,
     systems: systems.length, mean_slant_delay_m: totalDelay / observed.length };
 }
 
@@ -159,15 +170,19 @@ export function buildGnssGrid(cube, frame, satPositions,
   const latitudes = [], longitudes = [];
   for (let lat = -72; lat <= 72; lat += latStep) latitudes.push(lat);
   for (let lon = -180; lon < 180; lon += lonStep) longitudes.push(lon);
-  const bias = [], dop = [], counts = [];
+  const bias = [], biasH = [], biasV = [], dop = [], hdop = [], vdop = [], counts = [];
   let validCount = 0;
   for (const lat of latitudes) for (const lon of longitudes) {
     const found = solveIonoAt(cube, frame, satPositions, lat, lon, elevMask);
     bias.push(found?.iono_bias_m ?? null);
+    biasH.push(found?.iono_horizontal_m ?? null);
+    biasV.push(found?.iono_vertical_m ?? null);
     dop.push(found?.pdop ?? null);
+    hdop.push(found?.hdop ?? null);
+    vdop.push(found?.vdop ?? null);
     counts.push(found?.visible ?? 0);
     if (found) validCount++;
   }
   return { latitudes, longitudes, nx: longitudes.length, ny: latitudes.length,
-    bias, dop, counts, validCount, positions: satPositions.length, scale: 1 };
+    bias, biasH, biasV, dop, hdop, vdop, counts, validCount, positions: satPositions.length, scale: 1 };
 }

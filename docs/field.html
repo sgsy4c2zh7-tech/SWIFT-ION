@@ -16,7 +16,25 @@ label{display:flex;flex-direction:column;gap:4px;color:var(--muted);font-size:12
 #area .label{z-index:800}
 .label{position:absolute;top:12px;left:13px;background:#061a2acc;padding:8px 12px;border-radius:8px;pointer-events:none}.legend{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;color:var(--muted)}.ramp{width:240px;height:11px;border-radius:8px;background:linear-gradient(90deg,#0b124b,#2251b9,#1e9cd3,#36cc9a,#b5e552,#ffd231,#fd7321,#d32832)}
 #seek{width:100%;margin:4px 0 10px;accent-color:#73e2ef}.warn{color:#f8d39c;font-size:12px;line-height:1.65;margin:5px 0 12px}
-body:fullscreen{width:100%;height:100%;overflow:auto;background:#071522}body:fullscreen #area{height:65vh;min-height:250px}
+/* Fullscreen belongs to the MAP container only. Keep time + controls inside the map. */
+#area:fullscreen,#area:-webkit-full-screen{height:100vh;width:100vw;min-height:0;max-height:none;
+ border:0;border-radius:0;background:#081929}
+#area:fullscreen #timeLabel,#area:-webkit-full-screen #timeLabel{top:14px;right:16px;left:auto;max-width:60vw;
+ text-align:right;z-index:1100;font-size:clamp(12px,1.5vw,17px);font-weight:750;padding:9px 13px}
+#fieldMapHud{display:none}
+#area:fullscreen #fieldMapHud,#area:-webkit-full-screen #fieldMapHud{display:flex;flex-direction:column;
+ position:absolute;bottom:12px;left:14px;right:14px;max-height:53vh;overflow-y:auto;
+ z-index:1100;border:1px solid #436982;background:rgba(5,23,37,.91);border-radius:11px;
+ padding:8px 12px;box-shadow:0 8px 30px #0009;gap:6px}
+#fieldMapHud .controls{padding:3px;background:transparent;align-items:center;gap:7px}
+#fieldMapHud .controls label{font-size:11px}
+#fieldMapHud button,#fieldMapHud select{padding:5px 8px;font-size:12px}
+#fieldMapHud #seek{margin:3px 0;flex-shrink:0}
+#fieldMapHud .legend{font-size:11px;padding:3px 0}
+#fieldMapHud .contour-controls{gap:4px 8px;padding:5px 7px}
+@media(max-width:700px){#area:fullscreen #fieldMapHud{bottom:5px;left:5px;right:5px;max-height:60vh;padding:6px}
+#area:fullscreen #timeLabel{top:5px;right:5px;font-size:12px}}
+
 @media(max-width:700px){.controls{gap:6px}h1{font-size:18px}#area{height:49vh;min-height:300px}}
 
 /* SWIFT-ION field contour overlay (stays above the forecast heat image) */
@@ -34,7 +52,7 @@ body:fullscreen{width:100%;height:100%;overflow:auto;background:#071522}body:ful
 
 </style></head><body>
 <header><h1>SWIFT-ION / <span style="color:#79ddef">30-minute Ionosphere Forecast Cinema</span></h1><nav><a href="./index.html">ホーム</a><a href="./explorer.html">3D GAIA・4層シェル</a><a href="./route.html">foF2飛行経路動画</a><a href="./animate.html">高解像度TEC動画</a><a href="./year.html">365日精度履歴</a></nav></header>
-<div class="controls">
+<div class="controls" id="fieldControls">
 <label>物理量<select id="metric"><option value="fof2">foF2 [MHz]</option><option value="hmf2">hmF2 [km]</option><option value="ne">Ne [m⁻³]（指定高度）</option><option value="tec">VTEC [TECU]（IRI計算地点のみ）</option></select></label>
 <label>モデル<select id="variant"><option value="iri">IRI将来時刻基準</option><option value="tec">TEC連動シナリオ（実験）</option></select></label>
 <label>地理範囲<select id="region"><option value="japan">日本付近</option><option value="global">全球</option></select></label>
@@ -58,8 +76,8 @@ body:fullscreen{width:100%;height:100%;overflow:auto;background:#071522}body:ful
 <div class="warn">IRIの将来時刻プロファイルを間欠計算し、間は時間補間した研究用予報。TECで電子密度を一意に逆算することはできません。条件を満たした場合だけ一様スケーリングし、foF2を導出します。hmF2は補正せずIRI基準のみ。実測値や検証済み予報ではありません。</div>
 <div class="status" id="status">30分 IRI＋TECデータを読み込み中…</div>
 <input type="range" id="seek" min="0" max="0" step="1" value="0" aria-label="予報の時刻選択" disabled>
-<div id="area"><div id="fieldMap" role="application" aria-label="地図上のfoF2 / hmF2予報ヒートマップ"></div><canvas id="surface" aria-hidden="true"></canvas><div class="label" id="timeLabel">—</div></div>
-<div class="legend"><span id="low">—</span><span class="ramp"></span><span id="high">—</span><span id="valueMeta">—</span></div>
+<div id="area"><div id="fieldMap" role="application" aria-label="地図上のfoF2 / hmF2予報ヒートマップ"></div><canvas id="surface" aria-hidden="true"></canvas><div class="label" id="timeLabel">—</div><div id="fieldMapHud" role="group" aria-label="foF2全画面操作パネル"></div></div>
+<div class="legend" id="fieldLegend"><span id="low">—</span><span class="ramp"></span><span id="high">—</span><span id="valueMeta">—</span></div>
 <div class="warn">地図背景 © OpenStreetMap contributors または © Esri。地図と予報は緯度経度で位置合わせしています。クリックでその地点のモデル値を確認できます。<br>表示は限られたIRI計算地点間の距離重み付き空間補間です。計算地点から離れるほど半透明になり、観測・高解像度の予報を意味しません。元のTEC高解像度動画は別ページです。</div>
 </div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -136,6 +154,8 @@ function changeBasemap(){
 }
 function initMap(){
  if(!window.L)throw Error('Leafletが未読み込みです。地図CDNを確認してください');
+ L.DomEvent?.disableClickPropagation?.($('fieldMapHud'));
+ L.DomEvent?.disableScrollPropagation?.($('fieldMapHud'));
  p.map=L.map('fieldMap',{zoomControl:true,worldCopyJump:false,minZoom:1,maxZoom:12,preferCanvas:true});
  p.map.on('zoomend moveend',refreshFieldOverlays);
  p.map.createPane('forecastPane');p.map.getPane('forecastPane').style.zIndex='450';
@@ -245,8 +265,22 @@ $('toggleHeat').onchange=()=>{
 };
 for(const id of ['toggleContours','toggleContourLabels','toggleNumbers','contourStep'])
  $(id).onchange=refreshFieldOverlays;
-$('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.body.requestFullscreen()}catch(e){$('status').textContent='全画面: '+e.message}};
-document.addEventListener('fullscreenchange',()=>{setTimeout(()=>{p.map?.invalidateSize();draw()},180);$('fullscreen').textContent=document.fullscreenElement?'⤢ 全画面終了':'⛶ 全画面'});
+function syncFieldFullscreen(){
+ const active=document.fullscreenElement===$('area');
+ if(active){$('fieldMapHud').append($('fieldControls'),$('seek'),$('fieldLegend'));}
+ else{
+  document.querySelector('header').after($('fieldControls'));
+  $('area').before($('seek'));
+  $('area').after($('fieldLegend'));
+ }
+ $('fullscreen').textContent=active?'⤢ 全画面終了':'⛶ 地図を全画面';
+ setTimeout(()=>{p.map?.invalidateSize();if(p.data)draw()},150);
+}
+$('fullscreen').onclick=async()=>{try{
+ if(document.fullscreenElement===$('area'))await document.exitFullscreen();
+ else await $('area').requestFullscreen();
+ }catch(e){$('status').textContent='全画面: '+e.message}};
+document.addEventListener('fullscreenchange',syncFieldFullscreen);
 window.addEventListener('resize',()=>{p.map?.invalidateSize();if(p.data)draw()});window.addEventListener('pagehide',stop);
 try{configureContourStep();initMap();const r=await fetch('./ion_forecast.json',{cache:'no-store'});if(!r.ok)throw Error(`HTTP ${r.status}`);const v=await r.json();if(v.schema!=='swift-ion-iri-tec-forecast-v1'||!v.frames?.length)throw Error(v.status||'不正なスキーマ');p.data=v;
  $('seek').max=String(v.frames.length-1);$('seek').disabled=false;draw();}

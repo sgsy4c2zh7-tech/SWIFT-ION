@@ -1,0 +1,8 @@
+# 既存 .github/workflows/pages.yml の SWIFT-TEC clone ステップ直後に追加
+# GitHub Actions workflow steps are indented by six spaces.
+      - name: Prepare GNSS current TLE snapshot (latest only)
+        run: |
+          python scripts/build_gnss_latest.py
+          test -s docs/gnss_latest.json
+          test -s docs/vendor/satellite.min.js
+          python -c "import json; p=json.load(open('docs/gnss_latest.json')); assert p['is_latest_only'] and len(p['satellites']) > 0"
