@@ -1,0 +1,3 @@
+# .github/workflows/pages.yml の SWIFT-TEC clone の直後、TEC予報計算の直前に追加
+      - name: Prepare GNSS current TLE snapshot (latest only)
+        run: python scripts/build_gnss_latest.py

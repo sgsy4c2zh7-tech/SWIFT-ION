@@ -1,39 +1,140 @@
 <!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SWIFT-ION | 30-minute Global Animation</title>
+<title>SWIFT-ION | Global Time Animation / GNSS</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#071523;color:#eaf3fd;font:14px/1.55 system-ui,sans-serif}header{padding:13px 22px;background:#0b2032;border-bottom:1px solid #284359}h1{margin:0 0 5px;font-size:24px}a{color:#88d5ff}nav{display:flex;gap:16px;flex-wrap:wrap;padding:0 0 9px}.warn{color:#f4d39b;font-size:12px;line-height:1.5}.panel{padding:12px 22px;background:#10263b;border-bottom:1px solid #2b4b62}.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end}button,select{font:inherit;background:#18384e;color:#f0f8ff;border:1px solid #50738d;border-radius:8px;padding:8px 12px;cursor:pointer}button:hover{background:#275475}button.primary{background:#2e8aa1;font-weight:700}button:disabled{opacity:.4;cursor:not-allowed}label{font-size:12px;color:#bfd8e7;display:flex;flex-direction:column;gap:3px}#time{font-variant-numeric:tabular-nums;font-weight:650;color:#a3e5ff}#seek{width:100%;cursor:pointer;accent-color:#67d2f0;margin-top:10px}.legend{display:flex;gap:12px;align-items:center;color:#bfced9;font-size:12px}.ramp{width:220px;height:12px;background:linear-gradient(90deg,#233c86,#386bb0,#53b7c4,#a7daaa,#f3dc7a,#f49b55,#ad3649);border-radius:3px}#map{height:calc(100vh - 318px);min-height:380px;position:relative}#heat{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:450}.leaflet-control{z-index:700}#status{font-size:12px;color:#bfd4e6;margin-top:5px}.foot{padding:10px 22px;font-size:12px;color:#b8c9d9}
-@media(max-width:700px){header,.panel{padding-left:11px;padding-right:11px}#map{height:55vh}h1{font-size:20px}.toolbar{gap:6px}}
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#071523;color:#eaf3fd;font:14px/1.55 system-ui,sans-serif}
+header{padding:13px 22px;background:#0b2032;border-bottom:1px solid #284359}h1{margin:0 0 5px;font-size:24px}a{color:#88d5ff}nav{display:flex;gap:16px;flex-wrap:wrap;padding:0 0 9px}
+.warn{color:#f4d39b;font-size:12px;line-height:1.5}.panel{padding:12px 22px;background:#10263b;border-bottom:1px solid #2b4b62}.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+button,select{font:inherit;background:#18384e;color:#f0f8ff;border:1px solid #50738d;border-radius:8px;padding:8px 12px;cursor:pointer}button:hover{background:#275475}button.primary{background:#2e8aa1;font-weight:700}button:disabled{opacity:.4;cursor:not-allowed}
+label{font-size:12px;color:#bfd8e7;display:flex;flex-direction:column;gap:3px}.check{display:flex;flex-direction:row;align-items:center;gap:5px;white-space:nowrap;padding:7px 2px}input[type=checkbox]{accent-color:#67d2f0}
+#time{font-variant-numeric:tabular-nums;font-weight:650;color:#a3e5ff}#seek{width:100%;cursor:pointer;accent-color:#67d2f0;margin-top:10px}.legend{display:flex;gap:12px;align-items:center;color:#bfced9;font-size:12px}.ramp{width:220px;height:12px;background:linear-gradient(90deg,#233c86,#386bb0,#53b7c4,#a7daaa,#f3dc7a,#f49b55,#ad3649);border-radius:3px}
+#map{height:calc(100vh - 370px);min-height:380px;position:relative;background:#102438}#heat,#isolines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}#heat{z-index:450}#isolines{z-index:455}.leaflet-control{z-index:700}
+#status{font-size:12px;color:#bfd4e6;margin-top:5px;white-space:pre-wrap}.foot{padding:10px 22px;font-size:12px;color:#b8c9d9}
+#mapHud,#timeHud{display:none}#map:fullscreen,#map:-webkit-full-screen{width:100vw;height:100vh;min-height:0;background:#0a2033}
+#map:fullscreen #timeHud,#map:-webkit-full-screen #timeHud{display:block;position:absolute;z-index:1010;right:16px;top:14px;background:rgba(4,23,37,.91);color:#d9f6ff;border:1px solid #4f8093;border-radius:10px;padding:9px 14px;font-size:clamp(13px,1.5vw,19px);font-weight:750;text-align:right;font-variant-numeric:tabular-nums;pointer-events:none;box-shadow:0 5px 18px #0009}
+#map:fullscreen #mapHud,#map:-webkit-full-screen #mapHud{display:flex;position:absolute;z-index:1010;left:14px;right:14px;bottom:12px;flex-direction:column;gap:2px;pointer-events:none;background:rgba(4,22,37,.88);border:1px solid #4a788e;padding:9px 12px;border-radius:12px;box-shadow:0 7px 30px #0009}
+#mapHud .toolbar,#mapHud #seek,#mapHud .legend{pointer-events:auto}#mapHud .toolbar{gap:7px;align-items:center}#mapHud button,#mapHud select{padding:5px 9px}#mapHud label{font-size:11px}#mapHud #time{display:none}#mapHud #seek{margin-top:5px}#mapHud .legend{font-size:11px}
+@media(max-width:700px){header,.panel{padding-left:11px;padding-right:11px}#map{height:55vh}h1{font-size:20px}.toolbar{gap:6px}#map:fullscreen #mapHud{bottom:5px;left:6px;right:6px;padding:7px}#map:fullscreen #timeHud{top:6px;right:6px;font-size:12px}#mapHud button,#mapHud select{font-size:12px}}
 </style></head><body>
-<header><h1>SWIFT-ION <span style="color:#79d4f7">Global Time Animation</span></h1><nav><a href="./index.html">Dashboard</a><a href="./impact.html">Flight Route Impact</a><a href="./globe.html">3D Globe</a><a href="./ionosphere.html">IRI / F2</a><a href="./year.html">365-day Skill</a></nav><div class="warn">30分刻みのSWIFT-TEC VTECモデル予報（実測値ではありません）。滑らかな表示は空間補間による描画処理で、元の予報格子解像度を超える科学的情報は追加しません。補正段階は未検証です。</div></header>
-<section class="panel"><div class="toolbar">
-  <button id="play" class="primary" disabled>▶ 再生</button><button id="prev" disabled>◀ 30分</button><button id="next" disabled>30分 ▶</button>
-  <label>再生速度<select id="speed"><option value="1">1フレーム/秒</option><option value="2" selected>2フレーム/秒</option><option value="4">4フレーム/秒</option><option value="8">8フレーム/秒</option></select></label>
-  <label>表示項目<select id="mode"><option value="vtec">VTEC [TECU]</option><option value="delta30">直前30分との差 [TECU]</option></select></label>
-  <label>表示タイムゾーン<select id="tz"><option value="UTC">UTC</option><option value="Asia/Tokyo">JST</option></select></label>
-  <span id="time">データ準備中…</span>
+<header><h1>SWIFT-ION <span style="color:#79d4f7">Global Time Animation</span></h1><nav><a href="./index.html">Dashboard</a><a href="./impact.html">Flight Route Impact</a><a href="./globe.html">3D Globe</a><a href="./field.html">foF2 / IRI</a><a href="./year.html">365-day Skill</a></nav>
+<div class="warn">30分刻みのSWIFT-TEC VTECモデル予報（実測値ではありません）。GNSS指標は最新TLEに基づく単周波L1電離圏の簡易推定です。実測測位精度、利用可否、リアルタイム観測ではありません。</div></header>
+<section class="panel" id="panel"><div class="toolbar" id="toolbar">
+<button id="play" class="primary" disabled>▶ 再生</button><button id="prev" disabled>◀ 30分</button><button id="next" disabled>30分 ▶</button>
+<label>再生速度<select id="speed"><option value="1">1フレーム/秒</option><option value="2" selected>2フレーム/秒</option><option value="4">4フレーム/秒</option></select></label>
+<label>表示項目<select id="mode"><option value="vtec">VTEC [TECU]</option><option value="delta30">直前30分との差 [TECU]</option><option value="pdop">GNSS PDOP</option><option value="iono">GNSS L1電離圏起因位置偏差 [m]</option></select></label>
+<label id="gnssGroupLabel">GNSS<select id="gnssGroup"><option value="gps">GPSのみ</option><option value="gpsqzss" selected>GPS + QZSS</option><option value="all">全5システム（実験）</option></select></label>
+<label>表示タイムゾーン<select id="tz"><option value="UTC">UTC</option><option value="Asia/Tokyo">JST</option></select></label>
+<label class="check"><input type="checkbox" id="contourToggle" checked> 等値線</label>
+<label class="check"><input type="checkbox" id="labelToggle" checked> 線ラベル</label>
+<label class="check"><input type="checkbox" id="numberToggle"> 格子数値</label>
+<label>等値線間隔<select id="contourStep"><option value="auto" selected>自動</option><option value="1">1</option><option value="2">2</option><option value="5">5</option><option value="10">10</option></select></label>
+<button id="fullscreen">⛶ 地図を全画面</button><span id="time">データ準備中…</span>
 </div><input id="seek" type="range" min="0" max="0" step="1" value="0" disabled aria-label="予報時刻">
-<div class="legend"><span id="low">0</span><div class="ramp"></div><span id="high">100 TECU</span><span id="counter"></span></div><div id="status" role="status">30分間隔の格子データを読み込み中…</div></section>
-<div id="map"><canvas id="heat"></canvas></div><div class="foot">操作：時刻スライダー・再生/停止・速度変更・拡大/縮小。地図クリックで緯度経度と選択時刻のVTECを確認できます。公開情報を用いた研究画面であり、運用上の通信・航法判定には使えません。<span id="clicked"></span></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script type="module">
-import {ForecastCube,renderRaster,spatial} from './shared/forecast.js';
-const $=id=>document.getElementById(id);const cube=new ForecastCube('./animation/');
+<div class="legend" id="legend"><span id="low">0</span><div class="ramp"></div><span id="high">100 TECU</span><span id="counter"></span></div><div id="status" role="status">30分間隔の格子データを読み込み中…</div></section>
+<div id="map"><canvas id="heat" aria-hidden="true"></canvas><canvas id="isolines" aria-hidden="true"></canvas><div id="timeHud" aria-live="off"></div><div id="mapHud" role="group" aria-label="全画面操作パネル"></div></div>
+<div class="foot">操作：再生/停止、30分送り、時刻スライダー、地図ズーム。GNSS推定は単周波L1・350 km薄殻モデル・衛星配置・等重み最小二乗の参考値です。衛星健全性はGPSの公開YUMA情報以外、検証されていません。<span id="clicked"></span></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="./vendor/satellite.min.js"></script><script type="module">
+import {ForecastCube,renderRaster,spatial,interpolateColor} from './shared/forecast.js';
+import {prepareSatellites,propagateSnapshot,buildGnssGrid,MAX_TLE_AGE_HOURS} from './shared/gnss-iono.mjs';
+import {drawContours} from './shared/field-contour-canvas.mjs';
+const $=id=>document.getElementById(id),cube=new ForecastCube('./animation/');
 const map=L.map('map',{worldCopyJump:true,zoomControl:true}).setView([18,0],2);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:7}).addTo(map);
-let index=0,playing=false,timer=null,renderSeq=0,current=null;
+let index=0,playing=false,timer=null,renderSeq=0,current=null,previous=null,currentGrid=null,currentValues=null;
+let satellites=[],gnssInfo=null,gnssError='',gnssCache=new Map();
+const originalPanel=$('panel'),toolbar=$('toolbar'),seek=$('seek'),legend=$('legend'),status=$('status');
+function isFullscreen(){return document.fullscreenElement===$('map')}
+function restoreControls(){originalPanel.insertBefore(toolbar,status);originalPanel.insertBefore(seek,status);originalPanel.insertBefore(legend,status)}
+function syncFullscreen(){if(isFullscreen()){$('mapHud').append(toolbar,seek,legend);}else restoreControls();
+ $('fullscreen').textContent=isFullscreen()?'⤢ 全画面終了':'⛶ 地図を全画面';
+ requestAnimationFrame(()=>{map.invalidateSize();render()});
+}
+$('fullscreen').onclick=async()=>{try{if(isFullscreen())await document.exitFullscreen();else await $('map').requestFullscreen()}catch(e){status.textContent='全画面表示エラー: '+e.message}};
+document.addEventListener('fullscreenchange',syncFullscreen);
 function timeStr(t){return new Date(t).toLocaleString('ja-JP',{timeZone:$('tz').value,hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})+' '+$('tz').value}
 function stop(){playing=false;clearInterval(timer);timer=null;$('play').textContent='▶ 再生'}
-function start(){stop();playing=true;$('play').textContent='⏸ 停止';timer=setInterval(()=>select((index+1)%cube.times.length),1000/Number($('speed').value))}
-async function render(){if(!cube.times)return;const seq=++renderSeq;const mode=$('mode').value;
+function start(){if(!cube.times?.length)return;stop();playing=true;$('play').textContent='⏸ 停止';timer=setInterval(()=>select((index+1)%cube.times.length),1000/Number($('speed').value))}
+function showGnssOptions(){const on=['pdop','iono'].includes($('mode').value);$('gnssGroupLabel').style.display=on?'flex':'none';$('contourStep').title=on?'m または DOP値':'TECU';}
+function levels(){const mode=$('mode').value,explicit=Number($('contourStep').value);
+ if($('contourStep').value!=='auto'&&Number.isFinite(explicit)&&explicit>0)return explicit;
+ return mode==='iono'?2:mode==='pdop'?1:mode==='delta30'?5:10;}
+function displayScale(){const m=$('mode').value;
+ if(m==='pdop')return {min:1,max:8,low:'1',high:'8 PDOP',unit:'PDOP'};
+ if(m==='iono')return {min:0,max:20,low:'0',high:'20 m',unit:'m'};
+ if(m==='delta30')return {min:-15,max:15,low:'-15',high:'+15 TECU',unit:'TECU'};
+ return {min:0,max:100,low:'0',high:'100 TECU',unit:'TECU'};
+}
+function drawGnssHeat(grid,values){const canvas=$('heat'),size=map.getSize();if(size.x<2||size.y<2)return;
+ if(!grid||!values){const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);return;}
+ const w=Math.min(760,Math.max(2,Math.ceil(size.x*.7))),h=Math.min(420,Math.max(2,Math.ceil(size.y*.7)));
+ const scratch=document.createElement('canvas');scratch.width=w;scratch.height=h;
+ const ctx=scratch.getContext('2d'),im=ctx.createImageData(w,h),s=displayScale();
+ const lats=new Float64Array(h),lons=new Float64Array(w);
+ for(let x=0;x<w;x++)lons[x]=map.containerPointToLatLng([x*size.x/w,0]).lng;
+ for(let y=0;y<h;y++)lats[y]=map.containerPointToLatLng([0,y*size.y/h]).lat;
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+  const v=spatial(grid,values,lats[y],lons[x]);if(v===null||!Number.isFinite(v))continue;
+  const rgb=interpolateColor((v-s.min)/(s.max-s.min)),p=(y*w+x)*4;
+  im.data[p]=rgb[0];im.data[p+1]=rgb[1];im.data[p+2]=rgb[2];im.data[p+3]=rgb[3];
+ }
+ ctx.putImageData(im,0,0);const dpr=Math.min(2,window.devicePixelRatio||1);
+ canvas.width=Math.round(size.x*dpr);canvas.height=Math.round(size.y*dpr);
+ const c=canvas.getContext('2d');c.clearRect(0,0,canvas.width,canvas.height);c.imageSmoothingEnabled=true;c.drawImage(scratch,0,0,canvas.width,canvas.height);
+}
+function drawOverlay(){const mode=$('mode').value,s=displayScale();drawContours($('isolines'),map,currentGrid,currentValues,levels(),s.unit,{
+ showLines:$('contourToggle').checked,showLabels:$('labelToggle').checked,showNumbers:$('numberToggle').checked});}
+function resolveGnss(frame){const time=cube.times[index],group=$('gnssGroup').value,key=index+'|'+group;
+ if(gnssCache.has(key))return gnssCache.get(key);
+ const position=propagateSnapshot(satellites,window.satellite,time,group,MAX_TLE_AGE_HOURS);
+ if(!position.length)return null;
+ const grid=buildGnssGrid(cube,frame,position,{latStep:6,lonStep:6,elevMask:10});
+ if(!grid.validCount)return null;
+ gnssCache.set(key,grid);while(gnssCache.size>2)gnssCache.delete(gnssCache.keys().next().value);
+ return grid;
+}
+async function loadGnss(){try{
+ const r=await fetch('./gnss_latest.json',{cache:'no-store'});if(!r.ok)throw Error('latest snapshot HTTP '+r.status);
+ gnssInfo=await r.json();satellites=prepareSatellites(gnssInfo,window.satellite);
+ if(!satellites.length)throw Error('有効TLEがありません');
+ gnssError='';
+ }catch(e){gnssError=e.message||String(e);satellites=[];}
+}
+async function render(){if(!cube.times)return;const seq=++renderSeq,mode=$('mode').value;
  try{const data=await cube.frame(index),prev=mode==='delta30'&&index>0?await cube.frame(index-1):null;if(seq!==renderSeq)return;
-   current=data;renderRaster($('heat'),map,cube,data,prev,mode);$('counter').textContent=`${index+1} / ${cube.times.length} フレーム`;const label=timeStr(cube.times[index]);$('time').textContent=label;
-   $('seek').value=String(index);$('status').textContent=`予報：${label} | 元格子 ${cube.ny} × ${cube.nx} | ${cube.index.metadata.source_stage} | 発表: ${cube.index.metadata.generated_at}`;
-   $('low').textContent=mode==='delta30'?'-15':'0';$('high').textContent=mode==='delta30'?'+15 TECU':'100 TECU';
- }catch(e){stop();$('status').textContent='読み込みエラー: '+e.message}}
+ current=data;previous=prev;const label=timeStr(cube.times[index]);$('counter').textContent=`${index+1} / ${cube.times.length} フレーム`;
+ $('time').textContent=label;$('timeHud').textContent=label;$('seek').value=String(index);
+ const s=displayScale();$('low').textContent=s.low;$('high').textContent=s.high;
+ let extra='';currentGrid=null;currentValues=null;
+ if(mode==='pdop'||mode==='iono'){
+  if(gnssError)extra='GNSS取得失敗: '+gnssError;
+  else {
+   const grid=resolveGnss(data);
+   if(!grid)extra=`GNSS値なし：可視衛星/形状不足・TLE鮮度超過（最大±${MAX_TLE_AGE_HOURS}時間）・VTEC欠測`;
+   else{currentGrid=grid;currentValues=mode==='pdop'?grid.dop:grid.bias;
+    extra=`GNSS: ${grid.positions}衛星（軌道推算対象） / 有効 ${grid.validCount}/${grid.nx*grid.ny} 格子（6°） · ${$('gnssGroup').selectedOptions[0].textContent}`;}
+  }
+  drawGnssHeat(currentGrid,currentValues);
+ }else{
+  renderRaster($('heat'),map,cube,data,prev,mode);
+  currentGrid=cube;
+  currentValues=data.map((x,i)=>x===null?null:(mode==='delta30'?(!prev||prev[i]===null?null:(x-prev[i])/cube.scale):x/cube.scale));
+ }
+ drawOverlay();
+ status.textContent=`予報：${label} | 元格子 ${cube.ny} × ${cube.nx} | ${cube.index.metadata.source_stage} | 発表: ${cube.index.metadata.generated_at}`+
+ (extra?'\n'+extra:'')+(mode==='iono'?'\n表示は未補正のL1電離圏起因位置偏差であり、総測位誤差ではありません。':'' );
+ }catch(e){stop();status.textContent='読み込み/描画エラー: '+e.message;console.error(e)}
+}
 function select(i){index=Math.max(0,Math.min(cube.times.length-1,i));render()}
 $('play').onclick=()=>playing?stop():start();$('prev').onclick=()=>{stop();select(index-1)};$('next').onclick=()=>{stop();select(index+1)};
-$('seek').oninput=e=>{stop();select(Number(e.target.value))};$('mode').onchange=render;$('tz').onchange=render;
+$('seek').oninput=e=>{stop();select(Number(e.target.value))};
+$('mode').onchange=()=>{showGnssOptions();render()};$('gnssGroup').onchange=()=>{gnssCache.clear();render()};$('tz').onchange=render;
+for(const id of ['contourToggle','labelToggle','numberToggle','contourStep'])$(id).onchange=drawOverlay;
 $('speed').onchange=()=>{if(playing)start()};map.on('moveend zoomend resize',()=>{if(current)render()});
-map.on('click',e=>{if(!current)return;const x=spatial(cube,current,e.latlng.lat,e.latlng.lng);$('clicked').textContent=x===null?'データ欠損':`選択位置 ${e.latlng.lat.toFixed(2)}°, ${e.latlng.lng.toFixed(2)}°：${x.toFixed(2)} TECU`});
-try{await cube.load();$('seek').max=String(cube.times.length-1);for(const id of ['play','prev','next','seek'])$(id).disabled=false;render();}catch(e){$('status').textContent='30分データ未公開: '+e.message+'。Actionsの Export / Validate animation ステップを確認してね。'}
+map.on('click',e=>{if(!current)return;const mode=$('mode').value;
+ const val=currentGrid&&currentValues?spatial(currentGrid,currentValues,e.latlng.lat,e.latlng.lng):null;
+ $('clicked').textContent=val===null?'データ不足':`選択位置 ${e.latlng.lat.toFixed(2)}°, ${e.latlng.lng.toFixed(2)}°：${val.toFixed(2)} ${mode==='pdop'?'PDOP':mode==='iono'?'m':'TECU'}`;
+});
+showGnssOptions();
+try{await Promise.all([cube.load(),loadGnss()]);$('seek').max=String(cube.times.length-1);for(const id of ['play','prev','next','seek'])$(id).disabled=false;render();}
+catch(e){status.textContent='30分データ未公開: '+e.message+'。Actionsの Export / Validate animation ステップを確認してください。'}
 </script></body></html>
