@@ -37,7 +37,27 @@ def parse_f107(items,now):
     t,v=max(out)
     return {'value_sfu':v,'observed_at_utc':t.isoformat().replace('+00:00','Z'),'use':'OBSERVED_PERSISTENCE_NOT_FORECAST'}
 
-def build(now,fetch=None):
+def same_issue_swifttec_kp(filename,now):
+    """Audited NOAA 3-day slots exported from the *same* upstream TEC run."""
+    if not filename or not Path(filename).is_file():return None
+    data=json.loads(Path(filename).read_text(encoding='utf-8'))
+    if data.get('schema')!='swift-ion-swifttec-issue-kp3day-v1' or data.get('source_mode')!='SWIFTTEC_SAME_ISSUE_NOAA_3DAY':return None
+    generated=time_utc(data['generated_at'])
+    if generated>now+timedelta(minutes=5) or now-generated>timedelta(hours=2):return None
+    first=time_utc(data['valid_from_utc']);last=time_utc(data['valid_until_exclusive_utc'])
+    if last-first!=timedelta(days=3):return None
+    slots=data.get('slots') or []
+    if len(slots)!=24:return None
+    results=[]
+    for row in slots:
+        t=time_utc(row['valid_from_utc']);value=num(row.get('kp'),0,9)
+        if value is None or t<first or not t<last or t.minute or t.second or (t-first).total_seconds()%10800: return None
+        results.append({'valid_from_utc':t.isoformat().replace('+00:00','Z'),'kp':value})
+    if sorted(x['valid_from_utc'] for x in results)!=[ (first+timedelta(hours=3*i)).isoformat().replace('+00:00','Z') for i in range(24) ]:return None
+    return results
+
+
+def build(now,fetch=None,swiftec_kp=None):
     fetch=fetch or _fetch_json
     ret={'schema':'swift-ion-fof2-driver-v1','fetched_at':now.isoformat().replace('+00:00','Z'),
          'kp_predicted':[],'f107_recent_observed':None,'errors':[],
@@ -45,6 +65,16 @@ def build(now,fetch=None):
     for what,url,parser,key in [('kp',K_URL,parse_kp,'kp_predicted'),('f107',F_URL,parse_f107,'f107_recent_observed')]:
         try:ret[key]=parser(fetch(url),now)
         except (OSError,ValueError,TypeError,KeyError,TimeoutError) as exc:ret['errors'].append(what+': '+str(exc)[:90])
+    try:
+        aligned=same_issue_swifttec_kp(swiftec_kp,now)
+        if aligned is not None:
+            ret['kp_predicted']=aligned
+            ret['kp_source']='SWIFT-TEC SAME-ISSUE NOAA 3-day geomagnetic forecast'
+            ret['kp_source_mode']='SWIFTTEC_SAME_ISSUE_NOAA_3DAY'
+        else:ret['kp_source_mode']='INDEPENDENT_NOAA_FALLBACK_OR_UNAVAILABLE'
+    except (OSError,ValueError,TypeError,KeyError,OverflowError) as exc:
+        ret['kp_source_mode']='INDEPENDENT_NOAA_FALLBACK_OR_UNAVAILABLE'
+        ret['errors'].append('upstream_kp_provenance: '+str(exc)[:100])
     return ret
 
 def _fetch_json(url):
@@ -75,8 +105,8 @@ def drivers_at(payload,valid_at,now):
     return kp,f107
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--out',type=Path,required=True);args=p.parse_args()
-    result=build(datetime.now(timezone.utc));args.out.parent.mkdir(parents=True,exist_ok=True)
+    p=argparse.ArgumentParser();p.add_argument('--out',type=Path,required=True);p.add_argument('--swiftec-kp',type=Path,default=None);args=p.parse_args()
+    result=build(datetime.now(timezone.utc),swiftec_kp=args.swiftec_kp);args.out.parent.mkdir(parents=True,exist_ok=True)
     args.out.write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8')
     print('foF2 drivers: predicted Kp bins',len(result['kp_predicted']),'recent observed F10.7',result['f107_recent_observed'] is not None,'warnings',len(result['errors']))
 

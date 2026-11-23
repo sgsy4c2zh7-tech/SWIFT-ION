@@ -143,7 +143,7 @@ jobs:
           PYNICT
 
       - name: Read NOAA Kp forecast and observed F10.7 for optional foF2 predictors
-        run: python scripts/build_fof2_drivers.py --out docs/fof2_drivers.json
+        run: python scripts/build_fof2_drivers.py --out docs/fof2_drivers.json --swiftec-kp docs/swifttec_kp_issued.json
 
       - name: Train leakage-safe empirical and nonlinear ML foF2 calibration
         run: |
@@ -321,6 +321,7 @@ jobs:
             docs/nict_fof2_status.json
             docs/nict_fof2_4station.csv
             docs/fof2_drivers.json
+            docs/swifttec_kp_issued.json
             docs/space_weather.json
             docs/density_slices.json
             docs/explorer_data.json

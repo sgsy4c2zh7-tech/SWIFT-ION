@@ -21,7 +21,9 @@ from statistics import mean
 
 from build_year_archive import (read_daily, write_daily, dates, valid_number,
                                 FOF2_TOL_MHZ, RETENTION_DAYS)
-from build_prospective_skill import iso, parse_utc, next_utc_hour, HORIZONS_H, save
+from build_prospective_skill import iso, parse_utc, next_utc_hour, save
+TEC_HORIZONS_H = (1,3,6,12,24,36,48,60,72)
+HORIZONS_H = TEC_HORIZONS_H
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = 'swift-ion-tec-fof2-prospective-v1'
@@ -106,6 +108,7 @@ def sample_station(frame, lat, lon):
             'predicted_fof2_ai_mhz':round(ai,4) if ai is not None and ai>0 else None,
             'kp_forecast':driver('kp_forecast',9),
             'f107_available':driver('f107_available',400),
+            'kp_3day_confirmed':bool(rows and all(c.get('kp_3day_confirmed') is True for _,c in rows)),
             'nearest_model_site_km':round(rows[0][0],2),
             'model_sites_used':len(rows), 'sampling':'SPATIAL_IDW_OF_SAME_ISSUE_MODEL_SITES'}
 
@@ -174,13 +177,14 @@ def build_snapshot(model, observations, now, max_stations=MAX_STATIONS):
 
 
 def recent_snapshots(history, now):
-    start=(now-timedelta(hours=30)).date()
+    # 72-hour forecasts can be verified days after issuance; 30h was too short.
+    start=(now-timedelta(hours=110)).date()
     result=[]
     for day in dates(start,now.date()):
         for s in read_daily(history/'tec_outlooks',day):
             try:
                 t=parse_utc(s['metadata']['issued_at'])
-                if s['metadata']['schema']==SCHEMA and now-timedelta(hours=30)<=t<now:
+                if s['metadata']['schema']==SCHEMA and now-timedelta(hours=110)<=t<now:
                     result.append(s)
             except (KeyError,TypeError,ValueError):pass
     return result
@@ -222,6 +226,7 @@ def score_observations(observations, snapshots, now):
                      'predicted_fof2_ai_mhz':f.get('predicted_fof2_ai_mhz'),
                      'kp_forecast':f.get('kp_forecast'),
                      'f107_available':f.get('f107_available'),
+                     'kp_3day_confirmed':f.get('kp_3day_confirmed') is True,
                      'nearest_model_site_km':f.get('nearest_model_site_km'),
                      'source_issued_at':snapshot['metadata']['source_issued_at']}
                 key=(name,iso(target),h)
@@ -260,15 +265,39 @@ def store_matches(history, rows, now):
     return count
 
 
+FOF2_MAIN_HIT_MHZ = 2.0
+FOF2_REPORT_THRESHOLDS_MHZ = (1.0, 2.0, 3.0)
+
+
+def kp_activity(kp):
+    """Research grouping of forecast Kp, NOT observed geomagnetic-storm labels.
+
+    NOAA G1 storm threshold is Kp >=5; <4 is quiet by convention for this
+    dashboard and 4–<5 is a separate transitional category.
+    """
+    if not valid_number(kp) or not 0 <= kp <= 9:
+        return 'UNKNOWN'
+    return 'STORM_KP_GE_5' if kp >= 5 else 'ACTIVE_KP_4_TO_5' if kp >= 4 else 'QUIET_KP_LT_4'
+
+
 def metric(rows, key):
-    differences=[r[key]-r['observed_fof2_mhz'] for r in rows if valid_number(r.get(key)) and valid_number(r.get('observed_fof2_mhz'))]
-    n=len(differences)
-    if not n:return {'sample_count':0,'hit_count':0,'hit_rate_percent':None,'mae':None,'rmse':None,'bias':None}
-    return {'sample_count':n,'hit_count':sum(abs(d)<=FOF2_TOL_MHZ for d in differences),
-            'hit_rate_percent':round(100*sum(abs(d)<=FOF2_TOL_MHZ for d in differences)/n,2),
-            'mae':round(mean(abs(d) for d in differences),4),
-            'rmse':round(math.sqrt(mean(d*d for d in differences)),4),
-            'bias':round(mean(differences),4)}
+    eligible=[r for r in rows if valid_number(r.get(key)) and valid_number(r.get('observed_fof2_mhz'))
+              and float(r['observed_fof2_mhz'])>0]
+    errors=[float(r[key])-float(r['observed_fof2_mhz']) for r in eligible]
+    percent_errors=[100*abs(e)/float(r['observed_fof2_mhz']) for e,r in zip(errors,eligible)]
+    n=len(errors)
+    threshold_hits={str(int(t)):sum(abs(e)<=t for e in errors) for t in FOF2_REPORT_THRESHOLDS_MHZ}
+    threshold_rates={k:round(100*h/n,2) if n else None for k,h in threshold_hits.items()}
+    return {'sample_count':n,
+            'hit_count':threshold_hits['2'],
+            'hit_rate_percent':threshold_rates['2'],
+            'hit_threshold_mhz':FOF2_MAIN_HIT_MHZ,
+            'hits_by_threshold_mhz':threshold_hits,
+            'hit_rate_by_threshold_pct':threshold_rates,
+            'mae':round(mean(abs(e) for e in errors),4) if n else None,
+            'rmse':round(math.sqrt(mean(e*e for e in errors)),4) if n else None,
+            'bias':round(mean(errors),4) if n else None,
+            'mape_pct':round(mean(percent_errors),4) if n else None}
 
 
 def paired_summary(rows):
@@ -279,6 +308,9 @@ def paired_summary(rows):
     # sensitivity values into the same validation population.
     accepted=[r for r in candidates if r.get('fof2_quality','STANDARD')=='STANDARD']
     extended=[r for r in candidates if r.get('fof2_quality')=='EXTENDED']
+    kp3day=[r for r in accepted if r.get('kp_3day_confirmed') is True]
+    by_activity={group:[r for r in kp3day if kp_activity(r.get('kp_forecast'))==group]
+                 for group in ('QUIET_KP_LT_4','ACTIVE_KP_4_TO_5','STORM_KP_GE_5','UNKNOWN')}
     iri=metric(accepted,'predicted_fof2_iri_mhz')
     tec=metric(accepted,'predicted_fof2_tec_mhz')
     improvement=round(tec['hit_rate_percent']-iri['hit_rate_percent'],2) if accepted else None
@@ -287,6 +319,13 @@ def paired_summary(rows):
             'tec_coverage_percent':round(100*len(accepted)/all_baseline['sample_count'],2) if all_baseline['sample_count'] else None,
             'hit_rate_gain_pp':improvement,
             'display_coverage_percent':round(100*len(candidates)/all_baseline['sample_count'],2) if all_baseline['sample_count'] else None,
+            'kp3day_paired_count':len(kp3day),
+            'kp3day_iri':metric(kp3day,'predicted_fof2_iri_mhz'),
+            'kp3day_tec':metric(kp3day,'predicted_fof2_tec_mhz'),
+            'kp3day_by_activity':{group:{'paired_count':len(cohort),
+                 'iri':metric(cohort,'predicted_fof2_iri_mhz'),
+                 'tec':metric(cohort,'predicted_fof2_tec_mhz')}
+                 for group,cohort in by_activity.items()},
             'extended_paired_count':len(extended),
             'extended_iri':metric(extended,'predicted_fof2_iri_mhz'),
             'extended_tec':metric(extended,'predicted_fof2_tec_mhz')}
@@ -313,12 +352,19 @@ def report(history, now):
     byh={str(h):paired_summary(hrows[h]) for h in HORIZONS_H}
     return {'schema':REPORT_SCHEMA,'metadata':{'generated_at':iso(now),
         'window_start_utc':start.isoformat(),'window_end_utc':now.date().isoformat(),
-        'retention_days':365,'fof2_hit_threshold_mhz':FOF2_TOL_MHZ,
+        'retention_days':365,'fof2_hit_threshold_mhz':FOF2_MAIN_HIT_MHZ,
+        'fof2_additional_thresholds_mhz':[1,3],
+        'kp_activity_groups':{'QUIET_KP_LT_4':'forecast Kp < 4',
+             'ACTIVE_KP_4_TO_5':'4 <= forecast Kp < 5',
+             'STORM_KP_GE_5':'forecast Kp >= 5',
+             'UNKNOWN':'forecast Kp is unavailable'},
         'comparison':'Same prospectively issued model, station, valid UTC and observation; only paired eligible TEC scenarios',
         'source':'SWIFT-TEC 30-min VTEC + future IRI-2020 anchors; KC2G/GIRO-derived stations',
         'observations_license':'GIRO-derived via KC2G: CC BY-NC-SA 4.0; noncommercial; acknowledge station providers',
         'is_validated_assimilative_forecast':False,'is_hmf2_tec_skill':False,
         'is_3d_density_skill':False,
+        'kp_3day_main_skill_requires_exact_same_run_source':True,
+        'lead_times_hours':list(HORIZONS_H),
         'warning':'Research-only uniform scaling scenario. MAIN paired accuracy uses STANDARD quality only; EXTENDED low-confidence estimates have separately labeled provisional metrics. Missing observations do not count as misses; no retrospective forecast backfill.'},
         'status':'AVAILABLE' if sum(x['paired_count'] for x in byh.values()) else 'AWAITING_PAIRED_PROSPECTIVE_MATCHES',
         'total_matches':total,'observation_days_with_matches':len(seen),
@@ -330,7 +376,11 @@ def export_csv(path, rows, date_key):
            'iri_hit_pct_paired','tec_hit_pct_paired','gain_percentage_points',
            'iri_mae_mhz_paired','tec_mae_mhz_paired','iri_rmse_mhz_paired','tec_rmse_mhz_paired',
            'iri_bias_mhz_paired','tec_bias_mhz_paired',
-           'extended_paired_n','extended_tec_hit_pct_provisional','display_coverage_pct']
+           'extended_paired_n','extended_tec_hit_pct_provisional','display_coverage_pct',
+           'same_issue_kp3day_n','same_issue_kp3day_tec_hit_pct','same_issue_kp3day_tec_mae_mhz',
+           'same_issue_kp3day_hit_pct_1mhz','same_issue_kp3day_hit_pct_2mhz','same_issue_kp3day_hit_pct_3mhz',
+           'same_issue_kp3day_iri_mae_mhz','same_issue_kp3day_tec_rmse_mhz','same_issue_kp3day_tec_bias_mhz','same_issue_kp3day_tec_mape_pct',
+           'forecast_kp_quiet_n','forecast_kp_storm_n']
     with Path(path).open('w',newline='',encoding='utf-8-sig') as f:
         w=csv.DictWriter(f,fieldnames=names);w.writeheader()
         for item in rows:
@@ -341,7 +391,19 @@ def export_csv(path, rows, date_key):
             'gain_percentage_points':s['hit_rate_gain_pp'],
             'extended_paired_n':s['extended_paired_count'],
             'extended_tec_hit_pct_provisional':s['extended_tec']['hit_rate_percent'],
-            'display_coverage_pct':s['display_coverage_percent']}
+            'display_coverage_pct':s['display_coverage_percent'],
+            'same_issue_kp3day_n':s['kp3day_paired_count'],
+            'same_issue_kp3day_tec_hit_pct':s['kp3day_tec']['hit_rate_percent'],
+            'same_issue_kp3day_tec_mae_mhz':s['kp3day_tec']['mae'],
+            'same_issue_kp3day_hit_pct_1mhz':s['kp3day_tec']['hit_rate_by_threshold_pct']['1'],
+            'same_issue_kp3day_hit_pct_2mhz':s['kp3day_tec']['hit_rate_by_threshold_pct']['2'],
+            'same_issue_kp3day_hit_pct_3mhz':s['kp3day_tec']['hit_rate_by_threshold_pct']['3'],
+            'same_issue_kp3day_iri_mae_mhz':s['kp3day_iri']['mae'],
+            'same_issue_kp3day_tec_rmse_mhz':s['kp3day_tec']['rmse'],
+            'same_issue_kp3day_tec_bias_mhz':s['kp3day_tec']['bias'],
+            'same_issue_kp3day_tec_mape_pct':s['kp3day_tec']['mape_pct'],
+            'forecast_kp_quiet_n':s['kp3day_by_activity']['QUIET_KP_LT_4']['paired_count'],
+            'forecast_kp_storm_n':s['kp3day_by_activity']['STORM_KP_GE_5']['paired_count']}
             for key in ('mae','rmse','bias'):
                 base[f'iri_{key}_mhz_paired']=iri[key];base[f'tec_{key}_mhz_paired']=tec[key]
             w.writerow(base)

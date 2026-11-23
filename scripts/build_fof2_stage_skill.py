@@ -11,20 +11,30 @@ from datetime import datetime,timezone,timedelta
 from collections import defaultdict
 from statistics import mean
 from build_year_archive import dates,read_daily,valid_number,RETENTION_DAYS
-from build_prospective_skill import HORIZONS_H,iso,parse_utc
+from build_prospective_skill import iso,parse_utc
+from build_tec_skill import HORIZONS_H
 
 ROOT=Path(__file__).resolve().parents[1]
 FIELDS={'physics':'predicted_fof2_physics_mhz','empirical':'predicted_fof2_empirical_mhz','ai':'predicted_fof2_ai_mhz'}
 
+STAGE_THRESHOLDS_MHZ=(1.,2.,3.)
+
+
 def score(rows,key):
-    f=FIELDS[key];errors=[r[f]-r['observed_fof2_mhz'] for r in rows
-                          if valid_number(r.get(f)) and valid_number(r.get('observed_fof2_mhz'))]
+    f=FIELDS[key]
+    errors=[float(r[f])-float(r['observed_fof2_mhz']) for r in rows
+            if valid_number(r.get(f)) and valid_number(r.get('observed_fof2_mhz'))]
     n=len(errors)
-    return {'n':n,'hits':sum(abs(e)<=1 for e in errors),
-            'hit_pct':round(sum(abs(e)<=1 for e in errors)*100/n,2) if n else None,
+    hits={str(int(t)):sum(abs(e)<=t for e in errors) for t in STAGE_THRESHOLDS_MHZ}
+    percentages={k:round(100*v/n,2) if n else None for k,v in hits.items()}
+    return {'n':n,'hits':hits['2'],'hit_pct':percentages['2'],
+            'hit_threshold_mhz':2,
+            'hits_by_threshold_mhz':hits,
+            'hit_pct_by_threshold_mhz':percentages,
             'mae_mhz':round(mean(abs(e) for e in errors),4) if n else None,
             'rmse_mhz':round(math.sqrt(mean(e*e for e in errors)),4) if n else None,
             'bias_mhz':round(mean(errors),4) if n else None}
+
 
 def rollup(rows):
     # Main 3-stage skill is strict and longitudinally comparable. Retain
@@ -39,7 +49,10 @@ def rollup(rows):
         aa=score(arr,a);bb=score(arr,b)
         return {'n':len(arr),a:aa,b:bb,'gain_hit_pp':round(bb['hit_pct']-aa['hit_pct'],2) if arr else None,
                 'mae_gain_mhz':round(aa['mae_mhz']-bb['mae_mhz'],4) if arr else None}
+    kp_confirmed=[r for r in standard if r.get('kp_3day_confirmed') is True]
     return {'records':len(rows),'strict_records':len(standard),'extended_records':len(extended),
+            'kp3day_confirmed':{'records':len(kp_confirmed),'stages':{k:score(kp_confirmed,k) for k in FIELDS},
+                    'empirical_ai_same_observations':pair([r for r in kp_confirmed if all(valid_number(r.get(FIELDS[k])) for k in ('empirical','ai'))], 'empirical','ai')},
             'extended_provisional_physics':score(extended,'physics'),
             'stages':s,'physics_empirical_same_observations':pair(pe,'physics','empirical'),
             'empirical_ai_same_observations':pair(ea,'empirical','ai'),
@@ -73,7 +86,8 @@ def report(history,now):
     by={str(h):rollup(lead_rows[h]) for h in HORIZONS_H}
     return {'schema':'swift-ion-fof2-three-stage-skill-v1','status':'AVAILABLE' if n else 'AWAITING_FUTURE_OBSERVATIONS',
             'metadata':{'generated_at':iso(now),'retention_days':365,'start_utc':first.isoformat(),
-                        'end_utc':now.date().isoformat(),'hit_definition':'abs(prediction-observation) <=1 MHz',
+                        'end_utc':now.date().isoformat(),'hit_definition':'abs(prediction-observation) <=2 MHz (MAIN); 1 and 3 MHz additionally',
+                        'hit_thresholds_mhz':[1,2,3],
                         'comparison':'same independent observation, same location, target, lead and prospectively issued models',
                         'observations_license':'GIRO derived via KC2G CC BY-NC-SA 4.0: noncommercial / original station acknowledgements',
                         'predeployment_backfill':False,
@@ -85,7 +99,7 @@ def report(history,now):
             'total_matches':n,'by_horizon':by,'daily':ds,'monthly':ms}
 
 def write_csv(path,rows,key):
-    headings=[key,'horizon_h','records','strict_records','extended_records','extended_physics_hit_pct_provisional','stage','n','hits','hit_pct','mae_mhz','rmse_mhz','bias_mhz','all_three_n']
+    headings=[key,'horizon_h','records','strict_records','extended_records','extended_physics_hit_pct_provisional','stage','n','hits','hit_pct','hit_pct_1mhz','hit_pct_2mhz','hit_pct_3mhz','mae_mhz','rmse_mhz','bias_mhz','all_three_n']
     with Path(path).open('w',encoding='utf-8-sig',newline='') as f:
         w=csv.DictWriter(f,fieldnames=headings);w.writeheader()
         for r in rows:
@@ -95,7 +109,11 @@ def write_csv(path,rows,key):
                     'extended_records':s['extended_records'],
                     'extended_physics_hit_pct_provisional':s['extended_provisional_physics']['hit_pct'],
                     'stage':stage,
-                    **metrics,'all_three_n':s['all_three_same_observations']['n']})
+                    **{k:v for k,v in metrics.items() if not isinstance(v,dict) and k not in ('hit_threshold_mhz',)},
+                    'hit_pct_1mhz':metrics['hit_pct_by_threshold_mhz']['1'],
+                    'hit_pct_2mhz':metrics['hit_pct_by_threshold_mhz']['2'],
+                    'hit_pct_3mhz':metrics['hit_pct_by_threshold_mhz']['3'],
+                    'all_three_n':s['all_three_same_observations']['n']})
 
 def run(history,docs,now=None):
     now=now or datetime.now(timezone.utc)

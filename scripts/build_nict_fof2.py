@@ -17,7 +17,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from build_year_archive import read_daily, write_daily, dates, RETENTION_DAYS
-from build_prospective_skill import parse_utc, iso, HORIZONS_H
+from build_prospective_skill import parse_utc, iso
+from build_tec_skill import HORIZONS_H
 from build_tec_skill import distance_km
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -176,7 +177,8 @@ def match_issued(observations,snapshots,now):
                          'source_issued_at':snap['metadata'].get('source_issued_at'),
                          'observation_source':obs['source'],'observation_source_url':obs.get('origin_url'),
                          'kp_forecast':f.get('kp_forecast'),
-                         'f107_available':f.get('f107_available')}
+                         'f107_available':f.get('f107_available'),
+                         'kp_3day_confirmed':f.get('kp_3day_confirmed') is True}
                     row.update({k:f.get(k) for k in FIELDS})
                     if 'predicted_fof2_physics_mhz' not in f:
                         row['predicted_fof2_physics_mhz']=row.get('predicted_fof2_tec_mhz')
@@ -230,10 +232,15 @@ def summarize(matches):
         for stage,field in stage_fields.items():
             d=[r[field]-r['observed_fof2_mhz'] for r in good
                if isinstance(r.get(field),(int,float)) and math.isfinite(r[field])]
+            rates={str(k):round(100*sum(abs(x)<=k for x in d)/len(d),2) if d else None
+                   for k in (1,2,3)}
             out[st]['stages'][stage]={
                 'n':len(d),
-                'hit_rate_pct':round(100*sum(abs(x)<=1 for x in d)/len(d),2) if d else None,
+                'hit_rate_pct':rates['2'],
+                'hit_threshold_mhz':2,
+                'hit_rate_by_threshold_pct':rates,
                 'mae_mhz':round(sum(abs(x) for x in d)/len(d),3) if d else None,
+                'rmse_mhz':round(math.sqrt(sum(x*x for x in d)/len(d)),3) if d else None,
                 'bias_mhz':round(sum(d)/len(d),3) if d else None}
         out[st].update(out[st]['stages']['physics'])
         # Phys/empirical/AI are additionally compared on identical availability.
@@ -284,6 +291,7 @@ def run(history,docs,import_dir=None,urls_json=None,now=None):
             w.writerow([r['station'],r['observed_at'],r['fof2_mhz'],r['source']])
     report={'schema':'swift-ion-nict-four-station-v1','generated_at':iso(now),
        'status':'OBSERVATIONS_AVAILABLE' if allobs else 'AWAITING_NICT_NUMERIC_CSV',
+       'hit_thresholds_mhz':[1,2,3],'main_hit_threshold_mhz':2,
        'new_observations':added,'observations_retained':len(allobs),
        'new_prospective_matches':newmatches,'prospective_matches_retained':len(allmatches),
        'last_7_days_published':len(published),'stations':summarize(allmatches),
