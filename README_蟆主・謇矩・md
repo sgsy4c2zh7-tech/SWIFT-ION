@@ -1,0 +1,58 @@
+# SWIFT-ION / foF2・hmF2 等値線オーバーレイ — 導入手順
+
+対象リポジトリ: `sgsy4c2zh7-tech/SWIFT-ION`
+対象ファイル: `docs/field.html`
+確認した元ファイルの Git blob SHA: `f18954947b27279a13ae193531ca69951d388248`
+
+## すぐに導入する方法（推奨・2ファイルだけ）
+
+1. GitHubの `docs/field.html` を、ZIP内の `docs/field.html` に**置き換える**。
+2. GitHubの `docs/shared/` に、ZIP内の `docs/shared/field-contours.mjs` を**新規追加する**。
+3. 2ファイルを同じコミットで反映する（GitHub Pages の既存デプロイを待つ）。
+
+`pages.yml`、`ion_forecast.json`、予報計算・機械学習・過去データ、30分動画の処理は変更不要です。
+現行の `docs/field.html` がその後更新されている場合は、上書き前に差分を確認してください。
+
+## コード差分として適用する方法（既存 HTML を上書きしたくない場合）
+
+`SWIFT-ION-foF2-contours.patch` には、**現行版の field.html から必要箇所だけ変更するパッチ**が入っています。
+リポジトリのルートで、ZIPをリポジトリ外の作業フォルダに解凍したうえで:
+
+```bash
+cp /path/to/unpacked/docs/shared/field-contours.mjs docs/shared/field-contours.mjs
+git apply --check /path/to/unpacked/SWIFT-ION-foF2-contours.patch
+git apply /path/to/unpacked/SWIFT-ION-foF2-contours.patch
+git add docs/field.html docs/shared/field-contours.mjs
+git commit -m "Add SWIFT-ION field contour overlays"
+git push
+```
+
+`git apply --check` が失敗した場合は現行HTMLとの不一致を意味します。強制適用せず差分を確認してください。
+
+## UI動作
+
+- ヒートマップ: 初期ON。既存の透明度スライダーはそのまま機能
+- 等値線: 初期ON。foF2 は 1 MHz 間隔、2 MHz ごとの主要線を太く描画
+- 線の数値: 初期ON。重なりを避けて等値線の近くに `8 MHz` などを表示
+- 格子数値: 初期OFF。地図の画面内に間引いた補間値を配置
+- 物理量別間隔: foF2 は 0.5 / 1 / 2 MHz、hmF2 は 25 / 50 / 100 km、TEC は 2 / 5 / 10 TECU、電子密度は 0.2 / 0.5 / 1 log₁₀[m⁻³]
+- 動画・スライダー: 各フレームでヒートマップと同じ重み付き補間格子を再利用して等値線を更新
+- 日本・全球切替、IRI・TEC連動、倍率切替、背景地図切替に対応
+
+## 技術的な注意
+
+- 等値線は *モデル補間値の可視化* で、観測所間の実測高分解能解析ではありません。
+- 今の実装の「電子密度」は `log₁₀ Ne [m⁻³]` で描画されます。
+- 欠測マスクに触れるセルには等値線を引きません。
+- Leaflet以外の外部JSライブラリを追加していません。
+- 等値線・線ラベル・数値が既存 Leaflet 地図上に重なる実装です。
+
+## 検証済み項目
+
+- 現行の GitHub `docs/field.html` と照合して元ファイルの Git blob SHA が完全一致
+- HTML内の追加スクリプト・追加モジュールの `node --check` 構文検証
+- marching squares、欠測セル、等値線の連結、Web Mercator位置合わせの Node 単体テスト
+- Leaflet 模擬レイヤーを使った等値線/ラベル/数値/表示切替の Node 統合テスト
+- 元ファイルへの diff パッチ適用と置換版ファイルの完全一致
+
+実際の地図タイルのネットワーク読み込みを伴うブラウザ確認は、この実行環境では行っていません。

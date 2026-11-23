@@ -1,0 +1,131 @@
+--- a/docs/field.html
++++ b/docs/field.html
+@@ -18,6 +18,20 @@
+ #seek{width:100%;margin:4px 0 10px;accent-color:#73e2ef}.warn{color:#f8d39c;font-size:12px;line-height:1.65;margin:5px 0 12px}
+ body:fullscreen{width:100%;height:100%;overflow:auto;background:#071522}body:fullscreen #area{height:65vh;min-height:250px}
+ @media(max-width:700px){.controls{gap:6px}h1{font-size:18px}#area{height:49vh;min-height:300px}}
++
++/* SWIFT-ION field contour overlay (stays above the forecast heat image) */
++.contour-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px 15px;
++ padding:7px 10px;border:1px solid #4c7792;border-radius:9px;background:#122b42}
++.contour-controls label{flex-direction:row;align-items:center;gap:5px;white-space:nowrap}
++.contour-controls input[type=checkbox]{width:auto;padding:0;accent-color:#74dbf2}
++.contour-controls select{padding:5px 7px}
++.swift-contour-label,.swift-value-label{border:0;background:transparent;pointer-events:none!important}
++.swift-contour-label span{display:block;white-space:nowrap;text-align:center;font-size:12px;font-weight:800;
++ color:#fff;text-shadow:0 0 3px #001725,1px 1px 2px #001725,-1px -1px 2px #001725}
++.swift-value-label span{display:block;margin:auto;max-width:56px;white-space:nowrap;text-align:center;
++ color:#fff;font-size:11px;font-weight:750;border-radius:3px;padding:1px 3px;
++ background:rgba(1,24,40,.43);text-shadow:0 0 3px #001725}
++
+ </style></head><body>
+ <header><h1>SWIFT-ION / <span style="color:#79ddef">30-minute Ionosphere Forecast Cinema</span></h1><nav><a href="./index.html">ホーム</a><a href="./explorer.html">3D GAIA・4層シェル</a><a href="./route.html">foF2飛行経路動画</a><a href="./animate.html">高解像度TEC動画</a><a href="./year.html">365日精度履歴</a></nav></header>
+ <div class="controls">
+@@ -28,6 +42,14 @@
+ <label>ヒートマップ透明度 <span id="heatAlphaLabel">65%</span><input id="heatAlpha" type="range" min="20" max="100" step="5" value="65" style="padding:2px 0;width:115px"></label>
+ <label style="flex-direction:row;align-items:center;gap:5px;margin-bottom:7px"><input type="checkbox" id="showSites" style="width:auto" checked>IRI計算地点</label>
+ <label>電子密度高度<select id="alt"><option value="100">100 km</option><option value="150">150 km</option><option value="200">200 km</option><option value="250">250 km</option><option value="300" selected>300 km</option><option value="350">350 km</option><option value="400">400 km</option><option value="500">500 km</option><option value="600">600 km</option><option value="800">800 km</option><option value="1000">1000 km</option></select></label>
++
++<div class="contour-controls" role="group" aria-label="等値線表示設定">
++<label><input type="checkbox" id="toggleHeat" checked> ヒートマップ</label>
++<label><input type="checkbox" id="toggleContours" checked> 等値線</label>
++<label><input type="checkbox" id="toggleContourLabels" checked> 線の数値</label>
++<label><input type="checkbox" id="toggleNumbers"> 格子数値</label>
++<label>線の間隔 <select id="contourStep" aria-label="等値線間隔"></select></label>
++</div>
+ <button class="primary" id="play">▶ 再生</button><button id="prev">◀</button><button id="next">▶</button>
+ <label>再生速度<select id="speed"><option value="0.5">0.5 fps</option><option value="1" selected>1 fps</option><option value="2">2 fps</option></select></label>
+ <button id="fullscreen">⛶ 全画面</button>
+@@ -45,7 +67,27 @@
+ import {PALETTES,distanceKm,clamp,valid} from './shared/gaia3d.mjs';
+ import {latitudeAtMercatorFraction} from './shared/map-geo.mjs';
+ import {coverageAlpha,COVERAGE_LIMIT_KM} from './shared/forecast-fade.mjs';
+-const $=id=>document.getElementById(id);const p={data:null,i:0,timer:null,map:null,base:null,heat:null,sites:null,weightGrid:null,mapWarning:''};
++import {CONTOUR_OPTIONS,drawFieldOverlays} from './shared/field-contours.mjs';
++const $=id=>document.getElementById(id);const p={data:null,i:0,timer:null,map:null,base:null,heat:null,sites:null,weightGrid:null,fieldGrid:null,mapWarning:''};
++/* SWIFT-ION: contour overlay options and state, independent of forecast model. */
++function configureContourStep(){
++ const cfg=CONTOUR_OPTIONS[$('metric').value]||CONTOUR_OPTIONS.fof2;
++ const selector=$('contourStep');selector.replaceChildren();
++ for(const step of cfg.steps){
++  const option=document.createElement('option');
++  option.value=String(step);option.textContent=`${step} ${cfg.unit}`;
++  option.selected=step===cfg.preferred;selector.appendChild(option);
++ }
++}
++function fieldOverlayOptions(){
++ return {metric:$('metric').value,step:Number($('contourStep').value),
++  showContours:$('toggleContours').checked,showContourLabels:$('toggleContourLabels').checked,
++  showNumbers:$('toggleNumbers').checked};
++}
++function refreshFieldOverlays(){
++ if(p.map&&p.fieldGrid)drawFieldOverlays(p.map,p.fieldGrid,fieldOverlayOptions());
++}
++
+ const bounds={japan:{w:121,e:152,s:23,n:47},global:{w:-180,e:180,s:-75,n:75}};
+ const palette=PALETTES.turbo;
+ function colors(t){const x=clamp(t,0,.99999)*(palette.length-1),i=Math.floor(x),f=x-i;return palette[i].map((v,k)=>Math.round(v*(1-f)+palette[i+1][k]*f))}
+@@ -95,6 +137,7 @@
+ function initMap(){
+  if(!window.L)throw Error('Leafletが未読み込みです。地図CDNを確認してください');
+  p.map=L.map('fieldMap',{zoomControl:true,worldCopyJump:false,minZoom:1,maxZoom:12,preferCanvas:true});
++ p.map.on('zoomend moveend',refreshFieldOverlays);
+  p.map.createPane('forecastPane');p.map.getPane('forecastPane').style.zIndex='450';
+  p.map.getPane('forecastPane').style.pointerEvents='none';
+  p.sites=L.layerGroup().addTo(p.map);
+@@ -143,7 +186,8 @@
+  const region=$('region').value,b=bounds[region],ss=regionSites(),[lo,hi,label]=range();
+  const nx=region==='japan'?195:216,ny=region==='japan'?146:126;
+  const cv=$('surface');cv.width=nx;cv.height=ny;
+- const ctx=cv.getContext('2d'),pixels=ctx.createImageData(nx,ny),weights=gridWeights(ss,nx,ny,b);let ok=0;
++ const ctx=cv.getContext('2d'),pixels=ctx.createImageData(nx,ny),weights=gridWeights(ss,nx,ny,b);
++ const fieldValues=new Float32Array(nx*ny).fill(NaN),fieldMask=new Uint8Array(nx*ny);let ok=0;
+  // Leaflet default CRS is Web Mercator; compute pixel-centre latitudes in that projection.
+  // Without this inversion, equatorward pixels drift from the tiles at high latitudes.
+  for(let y=0;y<ny;y++){
+@@ -152,6 +196,7 @@
+    if(valid(v)){
+     const a=coverageAlpha(nearestKm,region);
+     if(a>0){
++     fieldValues[y*nx+x]=v;fieldMask[y*nx+x]=1;
+      const col=colors((v-lo)/(hi-lo));
+      pixels.data[k]=col[0];pixels.data[k+1]=col[1];pixels.data[k+2]=col[2];pixels.data[k+3]=Math.round(255*a);
+      ok++;
+@@ -164,6 +209,10 @@
+  if(p.heat){p.heat.setBounds(mapBounds());p.heat.setUrl(url)}
+  else p.heat=L.imageOverlay(url,mapBounds(),{pane:'forecastPane',opacity:Number($('heatAlpha').value)/100,interactive:false,crossOrigin:false}).addTo(p.map);
+  p.heat.setOpacity(Number($('heatAlpha').value)/100);
++ if($('toggleHeat').checked){if(!p.map.hasLayer(p.heat))p.heat.addTo(p.map)}
++ else if(p.map.hasLayer(p.heat))p.map.removeLayer(p.heat);
++ p.fieldGrid={nx,ny,bounds:b,values:fieldValues,mask:fieldMask};
++ refreshFieldOverlays();
+  p.sites.clearLayers();
+  if($('showSites').checked){for(const s of ss){
+   if(!valid(s.lat)||!valid(s.lon))continue;
+@@ -182,15 +231,24 @@
+ function start(){stop();p.timer=setInterval(()=>step(1),1000/Number($('speed').value));$('play').textContent='⏸ 停止'}
+ $('play').onclick=()=>p.timer?stop():start();$('prev').onclick=()=>{stop();step(-1)};$('next').onclick=()=>{stop();step(1)};
+ $('seek').oninput=e=>{stop();p.i=Number(e.target.value);draw()};$('speed').onchange=()=>{if(p.timer)start()};
+-for(const id of ['metric','variant','alt'])$(id).onchange=draw;
++$('metric').onchange=()=>{configureContourStep();draw()};
++for(const id of ['variant','alt'])$(id).onchange=draw;
+ $('region').onchange=()=>{p.map?.fitBounds(mapBounds(),{padding:[8,8],animate:false});draw()};
+ $('mapStyle').onchange=changeBasemap;
+ $('heatAlpha').oninput=e=>{$('heatAlphaLabel').textContent=e.target.value+'%';p.heat?.setOpacity(Number(e.target.value)/100)};
+ $('showSites').onchange=draw;
++
++$('toggleHeat').onchange=()=>{
++ if(!p.heat||!p.map)return;
++ if($('toggleHeat').checked){if(!p.map.hasLayer(p.heat))p.heat.addTo(p.map)}
++ else if(p.map.hasLayer(p.heat))p.map.removeLayer(p.heat);
++};
++for(const id of ['toggleContours','toggleContourLabels','toggleNumbers','contourStep'])
++ $(id).onchange=refreshFieldOverlays;
+ $('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.body.requestFullscreen()}catch(e){$('status').textContent='全画面: '+e.message}};
+ document.addEventListener('fullscreenchange',()=>{setTimeout(()=>{p.map?.invalidateSize();draw()},180);$('fullscreen').textContent=document.fullscreenElement?'⤢ 全画面終了':'⛶ 全画面'});
+ window.addEventListener('resize',()=>{p.map?.invalidateSize();if(p.data)draw()});window.addEventListener('pagehide',stop);
+-try{initMap();const r=await fetch('./ion_forecast.json',{cache:'no-store'});if(!r.ok)throw Error(`HTTP ${r.status}`);const v=await r.json();if(v.schema!=='swift-ion-iri-tec-forecast-v1'||!v.frames?.length)throw Error(v.status||'不正なスキーマ');p.data=v;
++try{configureContourStep();initMap();const r=await fetch('./ion_forecast.json',{cache:'no-store'});if(!r.ok)throw Error(`HTTP ${r.status}`);const v=await r.json();if(v.schema!=='swift-ion-iri-tec-forecast-v1'||!v.frames?.length)throw Error(v.status||'不正なスキーマ');p.data=v;
+  $('seek').max=String(v.frames.length-1);$('seek').disabled=false;draw();}
+ catch(e){$('status').textContent='30分IRI予報データを読み込めません: '+e.message+'。Actionsの Build 30-minute ionosphere forecast cinema を確認してください。'}
+ </script></body></html>
