@@ -238,8 +238,9 @@ function draw(){
   if(!valid(s.lat)||!valid(s.lon))continue;
   L.circleMarker([s.lat,s.lon],{radius:2,color:'#eafaff',weight:1,opacity:.7,fillOpacity:.15,interactive:false}).addTo(p.sites);
  }}
- const f=p.data.frames[p.i],tag=f.is_prospective?'将来時刻の実験的推定':'発表以前の参考再生';
- $('timeLabel').textContent=`${f.valid_at} UTC · ${p.i+1}/${p.data.frames.length} · ${tag}`;
+ const f=p.data.frames[p.i];
+ // 地図上は予報日時のみ表示。フレーム番号と補足文は省略する。
+ $('timeLabel').textContent=`${f.valid_at} UTC`;
  $('low').textContent=lo+' '+label;$('high').textContent=hi+' '+label;
  $('valueMeta').textContent=`有効IRI計算地点 ${ss.length} · 有効描画画素 ${ok}/${nx*ny} · 地図重畳（Web Mercator） · 距離に応じて透過`;
  $('status').textContent=`状態: ${p.data.status} · 発表 ${p.data.metadata.issued_at} UTC · 30分間隔 · ${label} · ${$('variant').value==='tec'?'TEC連動シナリオ':'IRI基準'}\n`+
