@@ -1,0 +1,124 @@
+name: Repair observed Kp and enable 32 globally balanced stations
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: swift-ion-source-migrations
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out SWIFT-ION main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Repair exact-source indentation anchors safely
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/apply_observed_kp_patch.py')
+          original = path.read_text(encoding='utf-8')
+          text = original
+          # The original migration mistakenly assumed 18/13 indentation spaces.
+          # Current SWIFT-ION uses 17/12. Fix the migration itself, not the
+          # actual foF2 forecast or scoring source, before running the migration.
+          fixes = [
+              ('"                  for group in (',
+               '"                 for group in (', 2),
+              ('"             \'kp3day_by_activity\':',
+               '"            \'kp3day_by_activity\':', 2),
+              ('"                  \'iri\':metric(cohort,',
+               '"                 \'iri\':metric(cohort,', 3),
+              ('"                  \'tec\':metric(cohort,',
+               '"                 \'tec\':metric(cohort,', 3),
+              ('"                  for group,cohort in',
+               '"                 for group,cohort in', 3),
+              ('"         \'kp_3day_main_skill_requires_exact_same_run_source\':',
+               '"        \'kp_3day_main_skill_requires_exact_same_run_source\':', 2),
+          ]
+          for old, new, expected in fixes:
+              count = text.count(old)
+              if count == expected:
+                  text = text.replace(old, new)
+              elif count == 0 and new in text:
+                  print('Already fixed:', old.strip())
+              else:
+                  raise RuntimeError(
+                      f'Unsupported patch-script version. Anchor {old!r} '
+                      f'appeared {count} times; expected {expected}. No files written.'
+                  )
+          compile(text, str(path), 'exec')
+          if text != original:
+              path.write_text(text, encoding='utf-8')
+              print('Repaired observed Kp patch script')
+          else:
+              print('Observed Kp patch script already repaired')
+          PY
+
+      - name: Apply observed-Kp separation and skill reporting
+        run: python scripts/apply_observed_kp_patch.py
+
+      - name: Apply globally balanced 32-station sampling
+        run: python scripts/apply_station_coverage_patch.py
+
+      - name: Verify both migrations and run complete test suite
+        shell: bash
+        run: |
+          python -m py_compile \
+            scripts/apply_observed_kp_patch.py \
+            scripts/observed_kp_support.py \
+            scripts/build_tec_skill.py \
+            scripts/build_year_archive.py \
+            scripts/build_prospective_skill.py \
+            scripts/validate_ionosondes.py \
+            scripts/station_coverage.py
+          python -m unittest discover -s tests -v
+          python - <<'PY'
+          from pathlib import Path
+          tec = Path('scripts/build_tec_skill.py').read_text(encoding='utf-8')
+          year = Path('docs/year.html').read_text(encoding='utf-8')
+          workflow = Path('.github/workflows/pages.yml').read_text(encoding='utf-8')
+          assert "'kp3day_by_observed_activity':" in tec, 'Observed Kp scoring missing'
+          assert 'backfill_verified_matches(history,now)' in tec, 'Observed Kp archive tagging missing'
+          assert 'MAX_STATIONS = 32' in tec, 'TEC-linked station limit not expanded'
+          assert 'kp3day_by_observed_activity' in year, 'Observed Kp UI not migrated'
+          assert 'station_coverage.html' in year, 'Station coverage page navigation missing'
+          assert '--max-stations 32' in workflow, 'Workflow station limit not expanded'
+          print('Both upgrades verified; no historical forecast recomputation')
+          PY
+
+      - name: Commit repaired migration and integrated source changes
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            scripts/apply_observed_kp_patch.py \
+            scripts/build_tec_skill.py \
+            scripts/build_prospective_skill.py \
+            scripts/build_year_archive.py \
+            scripts/validate_ionosondes.py \
+            .github/workflows/pages.yml \
+            docs/year.html
+          if git diff --cached --quiet; then
+            echo 'Already repaired. Nothing to commit.'
+          else
+            git commit -m 'Repair observed-Kp skill migration and activate 32-station coverage'
+            git push origin HEAD:main
+          fi
