@@ -35,9 +35,7 @@ jobs:
           path = Path('scripts/apply_observed_kp_patch.py')
           original = path.read_text(encoding='utf-8')
           text = original
-          # The original migration mistakenly assumed 18/13 indentation spaces.
-          # Current SWIFT-ION uses 17/12. Fix the migration itself, not the
-          # actual foF2 forecast or scoring source, before running the migration.
+          # Adjust only the source-migration anchor strings, not the model.
           fixes = [
               ('"                  for group in (',
                '"                 for group in (', 2),
@@ -99,26 +97,35 @@ jobs:
           assert 'MAX_STATIONS = 32' in tec, 'TEC-linked station limit not expanded'
           assert 'kp3day_by_observed_activity' in year, 'Observed Kp UI not migrated'
           assert 'station_coverage.html' in year, 'Station coverage page navigation missing'
-          assert '--max-stations 32' in workflow, 'Workflow station limit not expanded'
+          assert '--max-stations 32' in workflow, 'In-run workflow setting not expanded'
           print('Both upgrades verified; no historical forecast recomputation')
           PY
 
-      - name: Commit repaired migration and integrated source changes
+      - name: Commit source files only (workflow edits require owner permissions)
         shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # Do not stage pages.yml: the GitHub App token lacks the workflows scope.
+          # The repository owner must change --max-stations 16 to 32 in
+          # .github/workflows/pages.yml separately in the GitHub web editor.
           git add \
             scripts/apply_observed_kp_patch.py \
             scripts/build_tec_skill.py \
             scripts/build_prospective_skill.py \
             scripts/build_year_archive.py \
             scripts/validate_ionosondes.py \
-            .github/workflows/pages.yml \
             docs/year.html
+          if git diff --cached --name-only | grep -q '^\.github/workflows/'; then
+            echo '::error::A workflow file was staged; refusing to push'
+            exit 1
+          fi
+          if ! git diff --quiet -- .github/workflows/pages.yml; then
+            echo '::notice::Source code will be committed, but pages.yml still needs a manual owner edit: --max-stations 16 -> 32'
+          fi
           if git diff --cached --quiet; then
-            echo 'Already repaired. Nothing to commit.'
+            echo 'Source files already repaired. Nothing to commit.'
           else
-            git commit -m 'Repair observed-Kp skill migration and activate 32-station coverage'
+            git commit -m 'Repair observed-Kp scoring and enable 32-station source sampling'
             git push origin HEAD:main
           fi
