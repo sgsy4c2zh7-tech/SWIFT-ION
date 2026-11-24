@@ -58,7 +58,7 @@ def metrics(pairs, units):
             'bias':round(statistics.mean(diff), 4), 'status':'DESCRIPTIVE_ONLY_SMALL_SAMPLE' if len(diff) < 10 else 'AVAILABLE'}
 
 
-def build_outlook(ionosonde, iri_function, generation_started_at, horizons=HORIZONS_H, max_stations=16, *, published_at=None):
+def build_outlook(ionosonde, iri_function, generation_started_at, horizons=HORIZONS_H, max_stations=32, *, published_at=None):
     """Make *future* IRI estimates at public station coordinates, no observation values used.
 
     The latest observations are used only to identify station coordinates and IDs.

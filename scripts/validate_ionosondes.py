@@ -130,20 +130,13 @@ def separation_km(a, b):
 
 
 def global_sample(records, limit):
-    if not records or limit < 1:
-        return []
-    records = sorted(records, key=lambda x: (x['station'], x['lat'], x['lon']))
-    center = {'lat': 0, 'lon': 0}
-    chosen = [min(range(len(records)), key=lambda i: (separation_km(records[i], center), i))]
-    remaining = set(range(len(records))) - set(chosen)
-    nearest = [separation_km(r, records[chosen[0]]) for r in records]
-    while remaining and len(chosen) < limit:
-        idx = max(remaining, key=lambda i: (nearest[i], -i))
-        chosen.append(idx)
-        remaining.remove(idx)
-        for i in remaining:
-            nearest[i] = min(nearest[i], separation_km(records[i], records[idx]))
-    return [records[i] for i in chosen]
+    """Geographically balanced selection among the source's REAL stations.
+
+    Deterministically favors underrepresented latitude/longitude sectors.
+    It never creates missing observation coordinates or values.
+    """
+    from station_coverage import balanced_global_sample
+    return balanced_global_sample(records, limit)
 
 
 def error_stats(pairs, unit):
@@ -206,7 +199,7 @@ def status_payload(now, status, message, raw_count=0, skipped=None):
             'stations': [], 'errors': []}
 
 
-def evaluate(raw, now=None, max_stations=16, max_age_hours=6, min_confidence=70, iri_function=None):
+def evaluate(raw, now=None, max_stations=32, max_age_hours=6, min_confidence=70, iri_function=None):
     now = now or datetime.now(timezone.utc)
     base = status_payload(now, 'NO_USABLE_OBSERVATIONS', 'No fresh and usable station records')
     base['schema_diagnostic'] = schema_diagnostic(raw)
@@ -215,6 +208,8 @@ def evaluate(raw, now=None, max_stations=16, max_age_hours=6, min_confidence=70,
     base['skipped'] = skipped
     stations = global_sample(records, max_stations)
     base['sampled_stations'] = len(stations)
+    from station_coverage import coverage_summary
+    base['coverage'] = coverage_summary(records, stations)
     if not stations:
         if skipped.get('bad_shape') == len(raw) and raw:
             base['status'] = 'SOURCE_SCHEMA_ERROR'
@@ -238,6 +233,7 @@ def evaluate(raw, now=None, max_stations=16, max_age_hours=6, min_confidence=70,
             base['errors'].append({'station': station['station'], 'error': str(exc)[:150]})
     base['stations'] = matched
     base['evaluated_stations'] = len(matched)
+    base['coverage']['iri_comparisons_succeeded'] = len(matched)
     if not matched:
         base['status'] = 'IRI_RUN_FAILED'
         base['message'] = 'IRI did not return any valid station comparisons'
@@ -264,7 +260,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument('--input', type=Path, help='Optional approved KC2G JSON snapshot for diagnostics')
-    parser.add_argument('--max-stations', type=int, default=16)
+    parser.add_argument('--max-stations', type=int, default=32)
     parser.add_argument('--max-age-hours', type=float, default=6)
     parser.add_argument('--min-confidence', type=float, default=70)
     args = parser.parse_args()

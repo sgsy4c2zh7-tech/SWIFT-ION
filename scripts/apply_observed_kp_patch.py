@@ -27,9 +27,9 @@ def upgrade_tec(s):
         "tec imports")
     s = once(s,
         "    by_activity={group:[r for r in kp3day if kp_activity(r.get('kp_forecast'))==group]\n"
-        "                  for group in ('QUIET_KP_LT_4','ACTIVE_KP_4_TO_5','STORM_KP_GE_5','UNKNOWN')}\n",
+        "                 for group in ('QUIET_KP_LT_4','ACTIVE_KP_4_TO_5','STORM_KP_GE_5','UNKNOWN')}\n",
         "    by_activity={group:[r for r in kp3day if kp_activity(r.get('kp_forecast'))==group]\n"
-        "                  for group in ('QUIET_KP_LT_4','ACTIVE_KP_4_TO_5','STORM_KP_GE_5','UNKNOWN')}\n"
+        "                 for group in ('QUIET_KP_LT_4','ACTIVE_KP_4_TO_5','STORM_KP_GE_5','UNKNOWN')}\n"
         "    # NEW MAIN BREAKDOWN: categorize the issued predictions by ACTUAL geomagnetic activity.\n"
         "    # Observed Kp arrives only after the 3-hour bin closes; unknown stays unknown.\n"
         "    by_observed_activity={group:[r for r in kp3day if kp_activity(r.get('kp_observed'))==group]\n"
@@ -37,24 +37,24 @@ def upgrade_tec(s):
         "    observed_pairs=sum(len(by_observed_activity[g]) for g in ('QUIET_KP_LT_4','ACTIVE_KP_4_TO_5','STORM_KP_GE_5'))\n",
         "tec groups")
     s = once(s,
-        "             'kp3day_by_activity':{group:{'paired_count':len(cohort),\n"
-        "                  'iri':metric(cohort,'predicted_fof2_iri_mhz'),\n"
-        "                  'tec':metric(cohort,'predicted_fof2_tec_mhz')}\n"
-        "                  for group,cohort in by_activity.items()},\n",
-        "             'kp3day_by_activity':{group:{'paired_count':len(cohort),\n"
-        "                  'iri':metric(cohort,'predicted_fof2_iri_mhz'),\n"
-        "                  'tec':metric(cohort,'predicted_fof2_tec_mhz')}\n"
-        "                  for group,cohort in by_activity.items()},\n"
+        "            'kp3day_by_activity':{group:{'paired_count':len(cohort),\n"
+        "                 'iri':metric(cohort,'predicted_fof2_iri_mhz'),\n"
+        "                 'tec':metric(cohort,'predicted_fof2_tec_mhz')}\n"
+        "                 for group,cohort in by_activity.items()},\n",
+        "            'kp3day_by_activity':{group:{'paired_count':len(cohort),\n"
+        "                 'iri':metric(cohort,'predicted_fof2_iri_mhz'),\n"
+        "                 'tec':metric(cohort,'predicted_fof2_tec_mhz')}\n"
+        "                 for group,cohort in by_activity.items()},\n"
         "             'kp3day_by_observed_activity':{group:{'paired_count':len(cohort),\n"
-        "                  'iri':metric(cohort,'predicted_fof2_iri_mhz'),\n"
-        "                  'tec':metric(cohort,'predicted_fof2_tec_mhz')}\n"
-        "                  for group,cohort in by_observed_activity.items()},\n"
+        "                 'iri':metric(cohort,'predicted_fof2_iri_mhz'),\n"
+        "                 'tec':metric(cohort,'predicted_fof2_tec_mhz')}\n"
+        "                 for group,cohort in by_observed_activity.items()},\n"
         "             'observed_kp_paired_count':observed_pairs,\n"
         "             'observed_kp_unknown_count':len(kp3day)-observed_pairs,\n",
         "tec observed rollup")
     s = once(s,
-        "         'kp_3day_main_skill_requires_exact_same_run_source':True,\n",
-        "         'kp_3day_main_skill_requires_exact_same_run_source':True,\n"
+        "        'kp_3day_main_skill_requires_exact_same_run_source':True,\n",
+        "        'kp_3day_main_skill_requires_exact_same_run_source':True,\n"
         "         'kp_grouping_main':'NOAA_SWPC_ESTIMATED_OBSERVED_KP_AFTER_3H_BIN_END',\n"
         "         'kp_grouping_reference':'ISSUED_NOAA_3DAY_FORECAST_KP',\n"
         "         'kp_missing_policy':'UNKNOWN_NOT_ZERO_AND_NOT_ASSUMED_FORECAST',\n",

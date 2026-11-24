@@ -12,7 +12,7 @@ fieldset{border:0;padding:0;display:flex;gap:12px;flex-wrap:wrap;align-items:end
 </style></head><body><main>
 <h1>SWIFT-ION <span style="color:#80cdfd">TEC連動foF2｜365日予報精度</span></h1>
 <p>SWIFT-TECのNOAA 3日間Kp予報から計算したTECをIRIに結合し、物理推定・経験係数・AI補正したfoF2の将来予報を、発表後の実測で評価します。</p>
-<nav><a href="#main-skill">主指標（Kp連動foF2）</a><a href="#tec-compare">IRIとの公平比較</a><a href="#stage-compare">経験係数・AI</a><a href="#iri-baseline">IRI単独参考</a><a href="./nict_skill.html">NICT4地点</a><a href="./skill.html">直近の予報照合</a><a href="./ionosonde.html">観測とIRI</a><a href="./ionosphere.html">全球モデル</a><a href="./quality.html">品質管理</a><a href="./year_daily.csv">日別CSV</a><a href="./year_monthly.csv">月別CSV</a></nav>
+<nav><a href="./station_coverage.html">観測所分布</a><a href="#main-skill">主指標（Kp連動foF2）</a><a href="#tec-compare">IRIとの公平比較</a><a href="#stage-compare">経験係数・AI</a><a href="#iri-baseline">IRI単独参考</a><a href="./nict_skill.html">NICT4地点</a><a href="./skill.html">直近の予報照合</a><a href="./ionosonde.html">観測とIRI</a><a href="./ionosphere.html">全球モデル</a><a href="./quality.html">品質管理</a><a href="./year_daily.csv">日別CSV</a><a href="./year_monthly.csv">月別CSV</a></nav>
 <div class="note"><b>主指標はTEC連動foF2。</b> 同じSWIFT-TEC実行で使われたNOAAの3日間Kp予報を確認でき、通常品質の予報だけを主指標に集計。メイン的中率は誤差±2 MHz以内（±1・±3 MHzも同時掲載）。未取得の実測やKpの出典を検証できない予報は0%ではなく「評価待ち」です。低信頼の参考予報は別集計。IRI単独は比較資料として下部に残します。</div>
 <p id="status">データ読み込み中…</p>
 <fieldset><label>予報リードタイム<select id="horizon"><option value="1">1時間</option><option value="3">3時間</option><option value="6">6時間</option><option value="12">12時間</option><option value="24" selected>24時間</option><option value="36">36時間</option><option value="48">48時間</option><option value="60">60時間</option><option value="72">72時間</option></select></label><label>期間<select id="period"><option value="30">直近30日</option><option value="90">直近90日</option><option value="365">365日</option></select></label></fieldset>
@@ -31,9 +31,9 @@ fieldset{border:0;padding:0;display:flex;gap:12px;flex-wrap:wrap;align-items:end
   <div class="card"><b id="mainIriImprovement">—</b><small>同一観測でのIRI比MAE改善率（正なら改善）</small></div>
 </div>
 <p id="mainIriDetails" class="small">同じ観測でのIRI基準との比較は評価待ち。</p>
-<div class="panel" style="margin:10px 0;background:#091d30"><h3>磁気活動別の予報精度（予報Kpで分類）</h3>
-<p class="small">平穏：予報Kp &lt;4 ／ 活動的：4以上5未満 ／ 磁気嵐相当：5以上。<b>これは観測された磁気嵐の検証ではなく、発表時の予報Kpに基づく分類</b>です。Kpが不明なら分類不能とします。</p>
-<div class="scroll"><table><thead><tr><th>予報Kp区分</th><th>評価件数</th><th>的中率 ±2 MHz</th><th>MAE（MHz）</th><th>IRI比MAE改善率</th></tr></thead><tbody id="mainWeatherRows"></tbody></table></div></div>
+<div class="panel" style="margin:10px 0;background:#091d30"><h3>磁気活動別のfoF2予報精度（観測Kpで分類）</h3>
+<p class="small">主分類はNOAA SWPCの<b>観測Kp</b>です。平穏：Kp &lt;4 ／ 活動的：4以上5未満 ／ 磁気嵐相当：5以上。予報値は発表時点の予報Kpで計算したものを変更しません。観測Kpは3時間区間終了後に対応付けます。未取得はKp不明として記録し、予報Kpで代用しません。NOAAの値は速報的推定値であり、GFZの確定Kpとは異なります。</p>
+<div class="scroll"><table><thead><tr><th>観測Kp区分</th><th>評価件数</th><th>的中率 ±2 MHz</th><th>MAE（MHz）</th><th>IRI比MAE改善率</th></tr></thead><tbody id="mainWeatherRows"></tbody></table></div><details style="margin-top:14px"><summary>参考：発表時の予報Kpで分類した場合</summary><p class="small">こちらは予報で想定した磁気活動ごとの結果です。実際の磁気嵐時の精度とは区別してください。</p><div class="scroll"><table><thead><tr><th>予報Kp区分</th><th>評価件数</th><th>的中率 ±2 MHz</th><th>MAE（MHz）</th><th>IRI比MAE改善率</th></tr></thead><tbody id="forecastKpRows"></tbody></table></div></details></div>
 <p class="small">最終モデルは、物理推定 → 採用済みの経験係数 → 検証済みAIの順に選択されます。まだ学習されていなければ物理推定。Kpの3日予報が確認できない期間は本主指標の母数に含めません。1・3・6・12・24・36・48・60・72時間先を切替可能。</p>
 </section>
 
@@ -151,16 +151,19 @@ function mainRender(days){
  $('mainIriImprovement').textContent=fair?fmt((iri.mae-tec.mae)/iri.mae*100,1)+'%':'—';
  $('mainIriDetails').textContent=fair?`同一${n}件：IRI基準 MAE ${fmt(iri.mae,3)} MHz → TEC連動 MAE ${fmt(tec.mae,3)} MHz。±2 MHz 的中率差 ${(100*(tec.hits[2]-iri.hits[2])/n)>=0?'+':''}${fmt(100*(tec.hits[2]-iri.hits[2])/n)} pp。`: 'IRIとの同一観測比較は評価待ち（観測なし、またはIRI値不足）。';
  const groups=[['QUIET_KP_LT_4','平穏（Kp <4）'],['ACTIVE_KP_4_TO_5','活動的（4≤Kp<5）'],['STORM_KP_GE_5','磁気嵐相当（Kp≥5）'],['UNKNOWN','Kp不明']];
- const body=$('mainWeatherRows');body.replaceChildren();
- for(const [key,label] of groups){
-  const g=metricSum(days,s=>s.kp3day_by_activity?.[key]?.tec);
-  const b=metricSum(days,s=>s.kp3day_by_activity?.[key]?.iri);
-  const improvement=g.n&&b.n===g.n&&b.mae>0?fmt(100*(b.mae-g.mae)/b.mae,1)+'%':'—';
-  const tr=body.insertRow();
-  for(const val of [label,g.n,g.n?fmt(100*g.hits[2]/g.n)+'%':'—',g.n?fmt(g.mae,3):'—',improvement])tr.insertCell().textContent=String(val);
+ for(const [id,selector] of [['mainWeatherRows','kp3day_by_observed_activity'],['forecastKpRows','kp3day_by_activity']]){
+  const body=$(id);body.replaceChildren();
+  for(const [key,label] of groups){
+   const g=metricSum(days,s=>s[selector]?.[key]?.tec);
+   const b=metricSum(days,s=>s[selector]?.[key]?.iri);
+   const improvement=g.n&&b.n===g.n&&b.mae>0?fmt(100*(b.mae-g.mae)/b.mae,1)+'%':'—';
+   const tr=body.insertRow();
+   for(const val of [label,g.n,g.n?fmt(100*g.hits[2]/g.n)+'%':'—',g.n?fmt(g.mae,3):'—',improvement])tr.insertCell().textContent=String(val);
+  }
  }
+ const observedKpCount=groups.slice(0,3).reduce((count,[key])=>count+metricSum(days,s=>s.kp3day_by_observed_activity?.[key]?.tec).n,0);
  $('mainStatus').textContent=n?
-   `確認済み：同一SWIFT-TEC実行で使用したNOAA 3日間Kp予報。${n}件を事前発表した最終TEC連動foF2と事後観測で照合。±2 MHzを主指標、±1/±3 MHzは参考。`:
+   `確認済み：同一SWIFT-TEC実行で使用したNOAA 3日間Kp予報で発表したfoF2を観測と照合 ${n}件。観測Kp分類できたのは${observedKpCount}件、未取得${n-observedKpCount}件。±2 MHzが主指標です。`:
    '評価待ち：現在の期間・リードタイムで、同じSWIFT-TEC実行のNOAA 3日間Kpが確認できた予報と、事後観測の一致ペアがまだありません。IRI単独の0%はここには流用しません。';
 }
 
