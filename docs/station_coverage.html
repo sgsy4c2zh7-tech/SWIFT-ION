@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SWIFT-ION | 世界の電離圏観測所カバレッジ</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#071523;color:#ecf5ff;font:15px/1.6 system-ui,-apple-system,'Segoe UI',sans-serif}main{max-width:1180px;margin:auto;padding:24px 16px 48px}h1{font-size:clamp(23px,4vw,34px);margin:0 0 6px}h2{font-size:18px;margin:18px 0 8px}a{color:#9bdaf9}p{margin:7px 0}small,.muted{color:#b4c9da}#map{height:min(66vh,600px);min-height:350px;background:#183149;border-radius:13px;border:1px solid #47637e;margin:15px 0}#grid{overflow:auto}table{border-collapse:collapse;width:100%;min-width:690px;text-align:center}td,th{border:1px solid #36526a;padding:7px 6px}th{color:#afddf3;background:#122b42}td{background:#112238}td.present{background:#195047;color:#e8f8ec}.statrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:18px 0}.stat{background:#10273a;border:1px solid #345872;border-radius:11px;padding:12px}.stat b{font-size:27px;display:block}.warning{border-left:3px solid #e8b267;padding:9px 12px;background:#1e2a37;color:#efdbba}.key{display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:13px}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#63d9bd;margin-right:5px}.dot.alt{background:#e2ba71}label{display:inline-flex;align-items:center;gap:7px;cursor:pointer}#error{color:#f0aaa0}.legend{font-size:13px;color:#b1cbd7}
+</style>
+</head>
+<body><main>
+<nav><a href="./index.html">SWIFT-ION</a> / <a href="./year.html">365日評価</a></nav>
+<h1>全球イオノゾンデ観測所カバレッジ</h1>
+<p class="muted">独立観測が利用できた実在の観測所のみを表示。予報の格子数とは異なります。</p>
+<div class="statrow"><div class="stat"><span>入力内の有効観測所</span><b id="usable">—</b></div><div class="stat"><span>地理的に選定した地点</span><b id="chosen">—</b></div><div class="stat"><span>IRI比較に成功</span><b id="successful">—</b></div><div class="stat"><span>カバーした地域区画 / 18</span><b id="covered">—</b></div></div>
+<p id="status" class="muted">観測データを読み込み中…</p>
+<div id="map" role="region" aria-label="世界の電離圏観測所分布"></div>
+<div class="key"><label><input type="checkbox" id="qualityOnly" checked> 品質スコア確認済みだけ表示</label><span><i class="dot"></i>品質スコア確認済み</span><span><i class="dot alt"></i>スコア不明（主的中率の評価対象外）</span></div>
+<h2>緯度帯×経度帯の観測所数</h2>
+<p class="legend">各区画は緯度幅60°（南高緯度30°〜90°、赤道域30°S〜30°N、北高緯度30°〜90°）×経度幅60°。選定数を表示します。空欄は現時点で選定された観測所なし（必ずしも地理的に観測所が存在しない意味ではありません）。</p>
+<div id="grid"></div>
+<p class="warning">注意：32地点はソフトウェア側の最大選定数です。元のKC2G/GIROデータ源が提供しない地域の観測所は増やせません。面積で均等な地球格子の真値を与えるものでもありません。観測値の提供元・利用条件・品質判定を引き続き遵守してください。</p>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const map=L.map('map',{worldCopyJump:true,zoomSnap:0.5}).setView([15,0],2);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors',maxZoom:9}).addTo(map);
+const marks=L.layerGroup().addTo(map);
+const bnames=['南緯30°以南','南緯30°〜北緯30°','北緯30°以北'];
+const lnames=['180°W–120°W','120°W–60°W','60°W–0°','0°–60°E','60°E–120°E','120°E–180°E'];
+let dataset=[];
+function validNum(x){return typeof x==='number'&&Number.isFinite(x)}
+function escapeText(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function renderMarkers(){
+  marks.clearLayers();let displayed=0;
+  for(const s of dataset){
+    if(!validNum(s.lat)||!validNum(s.lon))continue;
+    const known=s.confidence_known===true;
+    if($('qualityOnly').checked&&!known)continue;
+    const mark=L.circleMarker([s.lat,s.lon],{radius:5,color:'#112d39',weight:1,fillColor:known?'#63d9bd':'#e2ba71',fillOpacity:.94});
+    mark.bindPopup(`<b>${escapeText(s.station)}</b><br>Lat ${s.lat.toFixed(2)}° / Lon ${s.lon.toFixed(2)}°<br>観測: ${escapeText(s.observed_at)}<br>品質スコア: ${validNum(s.confidence)?s.confidence:'不明'}`);
+    mark.addTo(marks);displayed++;
+  }
+  $('status').textContent+=' ／ 地図上の表示: '+displayed+'地点';
+}
+$('qualityOnly').onchange=()=>{const label=$('status').textContent.split(' ／ 地図上の表示:')[0];$('status').textContent=label;renderMarkers()};
+function renderGrid(matrix){
+  if(!Array.isArray(matrix)||matrix.length!==3)return;
+  let html='<table><thead><tr><th>緯度帯</th>'+lnames.map(x=>`<th>${escapeText(x)}</th>`).join('')+'<th>計</th></tr></thead><tbody>';
+  for(let i=0;i<3;i++){
+    const arr=matrix[i]||[];
+    html+=`<tr><th>${escapeText(bnames[i])}</th>`;
+    for(let j=0;j<6;j++){let n=Number(arr[j])||0;html+=`<td class="${n?'present':''}">${n||'—'}</td>`}
+    html+=`<th>${arr.reduce((a,b)=>a+(Number(b)||0),0)}</th></tr>`;
+  }
+  $('grid').innerHTML=html+'</tbody></table>';
+}
+fetch('./ionosonde_validation.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()}).then(d=>{
+  const cv=d.coverage||{};dataset=Array.isArray(d.stations)?d.stations:[];
+  $('usable').textContent=cv.source_usable_stations??d.input_station_records??'—';
+  $('chosen').textContent=cv.selected_stations??d.sampled_stations??'—';
+  $('successful').textContent=cv.iri_comparisons_succeeded??d.evaluated_stations??'—';
+  $('covered').textContent=cv.selected_occupied_regions??'—';
+  $('status').textContent=`状態: ${d.status||'不明'} ／ 発表: ${d.metadata?.generated_at||'不明'} ／ ${dataset.length}地点を取得`;
+  renderMarkers();renderGrid(cv.selected_latitude_longitude_counts);
+  if(dataset.length){const bounds=L.latLngBounds(dataset.filter(r=>validNum(r.lat)&&validNum(r.lon)).map(r=>[r.lat,r.lon]));if(bounds.isValid())map.fitBounds(bounds.pad(.2),{maxZoom:3});}
+}).catch(e=>{$('error')?.remove();const p=document.createElement('p');p.id='error';p.textContent='観測所データの取得失敗: '+e.message+'。GitHub Actionsで ionosonde_validation.json の生成・公開を確認してください。';$('status').after(p);});
+</script>
+</body></html>
