@@ -20,9 +20,6 @@ jobs:
   test-and-publish:
     runs-on: ubuntu-24.04
     timeout-minutes: 55
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout SWIFT-ION
         uses: actions/checkout@v4
@@ -257,7 +254,7 @@ jobs:
         run: |
           python scripts/validate_ionosondes.py \
             --output docs/ionosonde_validation.json \
-            --max-stations 16 \
+            --max-stations 32 \
             --max-age-hours 6 \
             --min-confidence 70
           python - <<'PY'
@@ -373,6 +370,37 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs
+
+  deploy:
+    name: Deploy GitHub Pages
+    needs: test-and-publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Wait until Pages artifact is visible
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in $(seq 1 18); do
+            if gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
+              --jq '.artifacts[] | select(.name == "github-pages" and .expired == false) | .id' \
+              | grep -Eq '^[0-9]+$'; then
+              echo "GitHub Pages artifact is visible to the Actions API."
+              exit 0
+            fi
+            echo "Waiting for GitHub Pages artifact indexing ($attempt/18)..."
+            sleep 5
+          done
+          echo '::error::github-pages artifact was uploaded but is not visible to the Actions API.'
+          exit 1
 
       - name: Deploy GitHub Pages
         id: deployment
