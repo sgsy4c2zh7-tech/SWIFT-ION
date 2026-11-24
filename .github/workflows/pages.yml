@@ -51,6 +51,22 @@ jobs:
             https://github.com/sgsy4c2zh7-tech/tec_tool_globalgrid_f107_copy.git \
             _upstream_swifttec
 
+      - name: Build latest-only GNSS snapshot from SWIFT-TEC
+        run: |
+          python scripts/build_gnss_latest.py
+          test -s docs/gnss_latest.json
+          test -s docs/vendor/satellite.min.js
+          python - <<'PYGNSS'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('docs/gnss_latest.json').read_text(encoding='utf-8'))
+          assert d.get('schema')=='swift-ion-latest-gnss-v1'
+          assert d.get('status')=='AVAILABLE', 'No GNSS satellite data'
+          assert len(d.get('satellites',[]))>=4, 'Too few satellites'
+          assert d.get('historical_tle_retained') is False
+          print('GNSS latest snapshot:',len(d['satellites']),'satellites')
+          PYGNSS
+
       - name: Calculate SWIFT-TEC VTEC forecast and 30-minute animation
         run: |
           python scripts/build_live_swifttec.py
