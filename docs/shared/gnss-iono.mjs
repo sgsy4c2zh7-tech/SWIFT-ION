@@ -7,7 +7,7 @@
  * No fixed-age TLE propagation cutoff: SGP4 runs for requested forecast times.
  * Propagation uncertainty grows away from the TLE epoch; do not use operationally.
  */
-import {spatial} from './forecast.js';
+import {sampleForecast} from './japan-grid.mjs';
 const RAD = Math.PI / 180;
 export const L1_FREQUENCY_HZ = 1575.42e6;
 export const METERS_PER_TECU = 40.3e16 / (L1_FREQUENCY_HZ * L1_FREQUENCY_HZ);
@@ -123,7 +123,7 @@ export function solveIonoAt(cube, frame, satellites, latDeg, lonDeg, elevMask = 
     const p = EARTH_KM * up;
     const ray = -p + Math.sqrt(p * p + shell * shell - EARTH_KM * EARTH_KM);
     const xx = rx + ray * x, yy = ry + ray * y, zz = rz + ray * z;
-    const vtec = spatial(cube, frame, Math.atan2(zz, Math.hypot(xx, yy)) / RAD,
+    const vtec = sampleForecast(cube, frame, Math.atan2(zz, Math.hypot(xx, yy)) / RAD,
       Math.atan2(yy, xx) / RAD);
     if (vtec == null || !Number.isFinite(vtec) || vtec < 0) continue;
     const mapping = 1 / Math.sqrt(1 - Math.pow(EARTH_KM / shell, 2) * (1 - up * up));
@@ -165,12 +165,15 @@ export function solveIonoAt(cube, frame, satellites, latDeg, lonDeg, elevMask = 
 
 /** Calculate current frame only, in browser RAM. No DOP/position time series saved. */
 export function buildGnssGrid(cube, frame, satPositions,
-  { latStep = 6, lonStep = 6, elevMask = ELEVATION_MASK_DEG } = {}) {
+  { latStep = 6, lonStep = 6, elevMask = ELEVATION_MASK_DEG, bounds = null } = {}) {
   if (![latStep, lonStep].every(x => Number.isInteger(x) && x >= 2 && x <= 30))
     throw Error('格子間隔は2–30度の整数にしてください');
   const latitudes = [], longitudes = [];
-  for (let lat = -72; lat <= 72; lat += latStep) latitudes.push(lat);
-  for (let lon = -180; lon < 180; lon += lonStep) longitudes.push(lon);
+  const limits=bounds||{south:-72,north:72,west:-180,east:180};
+  if(!(limits.south < limits.north && limits.west < limits.east))
+    throw Error('Invalid GNSS grid bounds');
+  for (let lat = limits.south; lat <= limits.north + 1e-8; lat += latStep) latitudes.push(lat);
+  for (let lon = limits.west; bounds ? lon <= limits.east + 1e-8 : lon < limits.east - 1e-8; lon += lonStep) longitudes.push(lon);
   const bias = [], biasH = [], biasV = [], dop = [], hdop = [], vdop = [], counts = [];
   let validCount = 0;
   for (const lat of latitudes) for (const lon of longitudes) {
@@ -185,5 +188,5 @@ export function buildGnssGrid(cube, frame, satPositions,
     if (found) validCount++;
   }
   return { latitudes, longitudes, nx: longitudes.length, ny: latitudes.length,
-    bias, biasH, biasV, dop, hdop, vdop, counts, validCount, positions: satPositions.length, scale: 1 };
+    bias, biasH, biasV, dop, hdop, vdop, counts, validCount, positions: satPositions.length, scale: 1, regional:Boolean(bounds) };
 }

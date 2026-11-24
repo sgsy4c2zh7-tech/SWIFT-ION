@@ -8,7 +8,10 @@ header{padding:13px 22px;background:#0b2032;border-bottom:1px solid #284359}h1{m
 button,select{font:inherit;background:#18384e;color:#f0f8ff;border:1px solid #50738d;border-radius:8px;padding:8px 12px;cursor:pointer}button:hover{background:#275475}button.primary{background:#2e8aa1;font-weight:700}button:disabled{opacity:.4;cursor:not-allowed}
 label{font-size:12px;color:#bfd8e7;display:flex;flex-direction:column;gap:3px}.check{display:flex;flex-direction:row;align-items:center;gap:5px;white-space:nowrap;padding:7px 2px}input[type=checkbox]{accent-color:#67d2f0}
 #time{font-variant-numeric:tabular-nums;font-weight:650;color:#a3e5ff}#seek{width:100%;cursor:pointer;accent-color:#67d2f0;margin-top:10px}.legend{display:flex;gap:12px;align-items:center;color:#bfced9;font-size:12px}.ramp{width:220px;height:12px;background:linear-gradient(90deg,#233c86,#386bb0,#53b7c4,#a7daaa,#f3dc7a,#f49b55,#ad3649);border-radius:3px}
-#map{height:calc(100vh - 370px);min-height:380px;position:relative;background:#102438}#heat,#isolines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}#heat{z-index:450}#isolines{z-index:455}.leaflet-control{z-index:700}
+#map{height:calc(100vh - 370px);min-height:380px;position:relative;background:#102438}
+#heat{opacity:.70}#heatOpacity{width:116px;padding:0;height:23px;accent-color:#67d2f0;cursor:pointer}
+#mapHud #heatOpacity{width:100px}
+#heat,#isolines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}#heat{z-index:450}#isolines{z-index:455}.leaflet-control{z-index:700}
 #status{font-size:12px;color:#bfd4e6;margin-top:5px;white-space:pre-wrap}.foot{padding:10px 22px;font-size:12px;color:#b8c9d9}
 #mapHud,#timeHud{display:none}
 .gnss-pick{border:1px solid #4c7792;border-radius:9px;padding:5px 9px;margin:0;min-width:270px}
@@ -26,10 +29,11 @@ label{font-size:12px;color:#bfd8e7;display:flex;flex-direction:column;gap:3px}.c
 @media(max-width:700px){header,.panel{padding-left:11px;padding-right:11px}#map{height:55vh}h1{font-size:20px}.toolbar{gap:6px}#map:fullscreen #mapHud{bottom:5px;left:6px;right:6px;padding:7px}#map:fullscreen #timeHud{top:6px;right:6px;font-size:12px}#mapHud button,#mapHud select{font-size:12px}}
 </style></head><body>
 <header><h1>SWIFT-ION <span style="color:#79d4f7">Global Time Animation</span></h1><nav><a href="./index.html">Dashboard</a><a href="./impact.html">Flight Route Impact</a><a href="./globe.html">3D Globe</a><a href="./field.html">foF2 / IRI</a><a href="./year.html">365-day Skill</a></nav>
-<div class="warn">30分刻みのSWIFT-TEC VTECモデル予報（実測値ではありません）。GNSS指標は最新TLEをSGP4で伝搬した単周波L1電離圏の簡易推定です。TLE伝搬の72時間制限はありませんが、長期伝搬の精度は保証されません。実測測位精度、利用可否、リアルタイム観測ではありません。</div></header>
+<div class="warn">全球はSWIFT-TECのNOAA連動VTEC予報、日本周辺はSWIFT-TECのISEE時刻別平均VTEC＋予報Kp＋日本格子AI補正を用いる独立した予報です（いずれも実測値ではありません）。GNSS指標は最新TLEをSGP4で伝搬した単周波L1電離圏の簡易推定です。TLE伝搬の72時間制限はありませんが、長期伝搬の精度は保証されません。実測測位精度、利用可否、リアルタイム観測ではありません。</div></header>
 <section class="panel" id="panel"><div class="toolbar" id="toolbar">
 <button id="play" class="primary" disabled>▶ 再生</button><button id="prev" disabled>◀ 30分</button><button id="next" disabled>30分 ▶</button>
 <label>再生速度<select id="speed"><option value="1">1フレーム/秒</option><option value="2" selected>2フレーム/秒</option><option value="4">4フレーム/秒</option></select></label>
+<label>TEC予報モデル<select id="sourceRegion"><option value="global">全球（SWIFT-TEC / NOAA）</option><option value="japan">日本周辺（SWIFT-TEC / ISEE連動予報）</option></select></label>
 <label>表示項目<select id="mode"><option value="vtec">VTEC [TECU]</option><option value="delta30">直前30分との差 [TECU]</option><option value="pdop">GNSS PDOP</option><option value="hdop">GNSS HDOP</option><option value="vdop">GNSS VDOP</option><option value="iono_h">GNSS 水平位置偏差 [m]</option><option value="iono_v">GNSS 垂直位置偏差 [m]</option><option value="iono_3d">GNSS 3D位置偏差 [m]</option></select></label>
 <fieldset id="gnssGroupLabel" class="gnss-pick" aria-label="使用GNSSコンステレーション"><legend>GNSS衛星群（任意選択）</legend><div class="gnss-options">
 <label class="check"><input class="gnssConst" value="gps" type="checkbox" checked> GPS</label>
@@ -38,6 +42,7 @@ label{font-size:12px;color:#bfd8e7;display:flex;flex-direction:column;gap:3px}.c
 <label class="check"><input class="gnssConst" value="glonass" type="checkbox"> GLONASS</label>
 <label class="check"><input class="gnssConst" value="beidou" type="checkbox"> BeiDou</label>
 </div></fieldset>
+<label>透明度 <span id="heatOpacityLabel">70%</span><input type="range" id="heatOpacity" min="0" max="100" step="5" value="70" aria-label="ヒートマップの透明度"></label>
 <label>表示タイムゾーン<select id="tz"><option value="UTC">UTC</option><option value="Asia/Tokyo">JST</option></select></label>
 <label class="check"><input type="checkbox" id="contourToggle" checked> 等値線</label>
 <label class="check"><input type="checkbox" id="labelToggle" checked> 線ラベル</label>
@@ -50,9 +55,14 @@ label{font-size:12px;color:#bfd8e7;display:flex;flex-direction:column;gap:3px}.c
 <div class="foot">操作：再生/停止、30分送り、時刻スライダー、地図ズーム。GNSS推定は単周波L1・350 km薄殻モデル・衛星配置・等重み最小二乗の参考値です。衛星健全性はGPSの公開YUMA情報以外、検証されていません。<span id="clicked"></span></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="./vendor/satellite.min.js"></script><script type="module">
 import {ForecastCube,renderRaster,spatial,interpolateColor} from './shared/forecast.js';
+import {sampleForecast,renderRegionalRaster} from './shared/japan-grid.mjs';
 import {prepareSatellites,propagateSnapshot,buildGnssGrid} from './shared/gnss-iono.mjs';
 import {drawContours} from './shared/field-contour-canvas.mjs';
-const $=id=>document.getElementById(id),cube=new ForecastCube('./animation/');
+const $=id=>document.getElementById(id),globalCube=new ForecastCube('./animation/'),japanCube=new ForecastCube('./japan_animation/');
+// 日本域のGridは周回しないため、longitude 360°の全球wrapを禁止。
+japanCube.regional=true;
+let cube=globalCube,japanLoad=null;
+const JAPAN_BOUNDS=[[23.5,121.5],[46.8,151.0]];
 const map=L.map('map',{worldCopyJump:true,zoomControl:true}).setView([18,0],2);
 L.DomEvent?.disableClickPropagation?.($('mapHud'));
 L.DomEvent?.disableScrollPropagation?.($('mapHud'));
@@ -98,7 +108,7 @@ function drawGnssHeat(grid,values){const canvas=$('heat'),size=map.getSize();if(
  for(let x=0;x<w;x++)lons[x]=map.containerPointToLatLng([x*size.x/w,0]).lng;
  for(let y=0;y<h;y++)lats[y]=map.containerPointToLatLng([0,y*size.y/h]).lat;
  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-  const v=spatial(grid,values,lats[y],lons[x]);if(v===null||!Number.isFinite(v))continue;
+  const v=sampleForecast(grid,values,lats[y],lons[x]);if(v===null||!Number.isFinite(v))continue;
   const rgb=interpolateColor((v-s.min)/(s.max-s.min)),p=(y*w+x)*4;
   im.data[p]=rgb[0];im.data[p+1]=rgb[1];im.data[p+2]=rgb[2];im.data[p+3]=rgb[3];
  }
@@ -114,7 +124,9 @@ function resolveGnss(frame){const time=cube.times[index],systems=selectedConstel
  if(gnssCache.has(key))return gnssCache.get(key);
  const position=propagateSnapshot(satellites,window.satellite,time,systems);
  if(!position.length)return null;
- const grid=buildGnssGrid(cube,frame,position,{latStep:6,lonStep:6,elevMask:10});
+ const opts=cube.regional?{latStep:2,lonStep:2,elevMask:10,
+  bounds:{south:24,north:46,west:122,east:150}}:{latStep:6,lonStep:6,elevMask:10};
+ const grid=buildGnssGrid(cube,frame,position,opts);
  if(!grid.validCount)return null;
  gnssCache.set(key,grid);while(gnssCache.size>2)gnssCache.delete(gnssCache.keys().next().value);
  return grid;
@@ -126,7 +138,7 @@ async function loadGnss(){try{
  gnssError='';
  }catch(e){gnssError=e.message||String(e);satellites=[];}
 }
-async function render(){if(!cube.times)return;const seq=++renderSeq,mode=$('mode').value;
+async function render(){if(!cube?.times)return;const seq=++renderSeq,mode=$('mode').value;
  try{const data=await cube.frame(index),prev=mode==='delta30'&&index>0?await cube.frame(index-1):null;if(seq!==renderSeq)return;
  current=data;previous=prev;const label=timeStr(cube.times[index]);$('counter').textContent=`${index+1} / ${cube.times.length} フレーム`;
  $('time').textContent=label;$('timeHud').textContent=label;$('seek').value=String(index);
@@ -143,18 +155,19 @@ async function render(){if(!cube.times)return;const seq=++renderSeq,mode=$('mode
     currentGrid=grid;
     currentValues=({pdop:grid.dop,hdop:grid.hdop,vdop:grid.vdop,
       iono_h:grid.biasH,iono_v:grid.biasV,iono_3d:grid.bias})[mode];
-    extra=`GNSS: ${grid.positions}衛星（軌道推算対象） / 有効 ${grid.validCount}/${grid.nx*grid.ny} 格子（6°） · ${systems.join(' + ').toUpperCase()}`;
+    extra=`GNSS: ${grid.positions}衛星（軌道推算対象） / 有効 ${grid.validCount}/${grid.nx*grid.ny} 格子（${cube.regional?'2°':'6°'}） · ${systems.join(' + ').toUpperCase()}`;
    }
   }
   drawGnssHeat(currentGrid,currentValues);
   if(!currentValues)showMapNotice(extra+' 画面上のGNSS数値は欠測です。VTEC表示は引き続き使用できます。');
  }else{
-  renderRaster($('heat'),map,cube,data,prev,mode);
+  if(cube.regional)renderRegionalRaster($('heat'),map,cube,data,prev,mode);
+  else renderRaster($('heat'),map,cube,data,prev,mode);
   currentGrid=cube;
   currentValues=data.map((x,i)=>x===null?null:(mode==='delta30'?(!prev||prev[i]===null?null:(x-prev[i])/cube.scale):x/cube.scale));
  }
  drawOverlay();
- status.textContent=`予報：${label} | 元格子 ${cube.ny} × ${cube.nx} | ${cube.index.metadata.source_stage} | 発表: ${cube.index.metadata.generated_at}`+
+ status.textContent=`${cube.regional?'日本周辺 SWIFT-TEC/ISEE予報':'全球 SWIFT-TEC/NOAA予報'}：${label} | 元格子 ${cube.ny} × ${cube.nx} | ${cube.index.metadata.source_stage} | 発表: ${cube.index.metadata.generated_at}`+
  (extra?'\n'+extra:'')+(mode.startsWith('iono_')?'\n表示は未補正のL1換算電離圏起因位置偏差（研究用）であり、総測位誤差・観測精度ではありません。':'' );
  }catch(e){stop();status.textContent='読み込み/描画エラー: '+e.message;console.error(e)}
 }
@@ -164,13 +177,40 @@ $('seek').oninput=e=>{stop();select(Number(e.target.value))};
 $('mode').onchange=()=>{showGnssOptions();render()};
 for(const el of document.querySelectorAll('.gnssConst'))el.onchange=()=>{gnssCache.clear();render()};
 $('tz').onchange=render;
+$('heatOpacity').oninput=()=>{
+ const pct=Number($('heatOpacity').value);
+ $('heat').style.opacity=String(pct/100);
+ $('heatOpacityLabel').textContent=pct+'%';
+};
+async function switchForecastSource(){
+ stop();const seq=++renderSeq;
+ const japan=$('sourceRegion').value==='japan';
+ cube=japan?japanCube:globalCube;index=0;current=null;currentGrid=null;currentValues=null;gnssCache.clear();
+ const ctx=$('heat').getContext('2d');ctx.clearRect(0,0,$('heat').width,$('heat').height);
+ const lines=$('isolines').getContext('2d');lines.clearRect(0,0,$('isolines').width,$('isolines').height);
+ if(japan){
+  status.textContent='日本域のSWIFT-TEC / ISEE連動予報を読み込み中…';
+  if(!japanLoad)japanLoad=japanCube.load().catch(e=>{japanLoad=null;throw e});
+  try{await japanLoad;}catch(e){if(seq!==renderSeq)return;
+   const msg='日本域の独立したSWIFT-TEC / ISEE予報が未公開です。全球予報に代用しません: '+e.message;
+   status.textContent=msg;showMapNotice(msg);$('seek').disabled=true;return;}
+ }else if(!globalCube.times){
+   status.textContent='全球予報データを読み込めません。';return;
+ }
+ if(seq!==renderSeq)return;
+ $('seek').disabled=false;$('seek').max=String(cube.times.length-1);$('seek').value='0';
+ if(japan)map.fitBounds(JAPAN_BOUNDS,{padding:[12,12],animate:false});
+ else map.setView([18,0],2,{animate:false});
+ render();
+}
+$('sourceRegion').onchange=switchForecastSource;
 for(const id of ['contourToggle','labelToggle','numberToggle','contourStep'])$(id).onchange=drawOverlay;
 $('speed').onchange=()=>{if(playing)start()};map.on('moveend zoomend resize',()=>{if(current)render()});
 map.on('click',e=>{if(!current)return;const mode=$('mode').value;
- const val=currentGrid&&currentValues?spatial(currentGrid,currentValues,e.latlng.lat,e.latlng.lng):null;
+ const val=currentGrid&&currentValues?sampleForecast(currentGrid,currentValues,e.latlng.lat,e.latlng.lng):null;
  $('clicked').textContent=val===null?'データ不足':`選択位置 ${e.latlng.lat.toFixed(2)}°, ${e.latlng.lng.toFixed(2)}°：${val.toFixed(2)} ${mode.endsWith('dop')?mode.toUpperCase():mode.startsWith('iono_')?'m':'TECU'}`;
 });
 showGnssOptions();
-try{await Promise.all([cube.load(),loadGnss()]);$('seek').max=String(cube.times.length-1);for(const id of ['play','prev','next','seek'])$(id).disabled=false;render();}
+try{await Promise.all([globalCube.load(),loadGnss()]);$('seek').max=String(globalCube.times.length-1);for(const id of ['play','prev','next','seek'])$(id).disabled=false;render();}
 catch(e){status.textContent='30分データ未公開: '+e.message+'。Actionsの Export / Validate animation ステップを確認してください。'}
 </script></body></html>

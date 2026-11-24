@@ -1,31 +1,43 @@
-# SWIFT-ION: GNSS snapshot generation fix
+# SWIFT-ION: 全球/日本域 SWIFT-TEC 予報切替・透明度
 
-## 内容
-`.github/workflows/pages.yml` を現行 `main` 版に対して最小変更しています。
+このパッチは、SWIFT-TECが実際に計算した日本周辺（ISEEベース）30分間隔VTEC予報をSWIFT-IONに取り込むもので、ISEE過去観測そのものや全球予報の日本域切り抜きは使用しません。
 
-追加したのは `Read upstream SWIFT-TEC (read-only)` の直後にある
-`Build latest-only GNSS snapshot from SWIFT-TEC` ステップだけです。
+## GitHubへアップロードするファイル
 
-このステップは:
-- `scripts/build_gnss_latest.py` を実行（現行リポジトリに既存）
-- `docs/gnss_latest.json` と `docs/vendor/satellite.min.js` の生成・存在を確認
-- JSONのスキーマ、有効衛星数、履歴非保存を検査
+- docs/animate.html                         （上書き）
+- docs/shared/gnss-iono.mjs                 （上書き）
+- docs/shared/field-contour-canvas.mjs      （上書き）
+- docs/shared/japan-grid.mjs                （新規）
+- scripts/build_live_japan_swifttec.py     （新規）
+- .github/workflows/pages.yml             （上書き）
 
-既存のTEC予報・foF2・学習・365日検証・Pages公開処理は変更していません。
+ZIP内のフォルダ階層をそのまま配置してください。docs/field.htmlなど他のファイルは変更しません。
 
-## 導入
-1. ZIPを展開します。
-2. GitHubリポジトリ `sgsy4c2zh7-tech/SWIFT-ION` の `.github/workflows/pages.yml` を、ZIP内の同名ファイルで上書きします。
-3. `main` ブランチにコミットします。
-   Summary: `Fix GNSS snapshot generation in Pages workflow`
-4. GitHub Actionsの `Build and publish SWIFT-ION` が完走しているか確認します。
-5. 公開後、次のURLを開いてJSONが表示されるかを確認します。
-   https://sgsy4c2zh7-tech.github.io/SWIFT-ION/gnss_latest.json
+Commit Summary:
+  Add ISEE-based Japan TEC forecast and heatmap opacity controls
+
+## 動作
+
+Global: SWIFT-ION従来の全球SWIFT-TEC/NOAA予報
+Japan: SWIFT-TEC自身が生成する ISEE時刻別平均VTEC + 予報Kp + 日本域格子AI補正の独立した予報
+日本域は別の30分格子データ docs/japan_animation/index.json と frames_*.json を、Pagesデプロイの都度生成して公開。
+衛星TLEおよびDOP結果の履歴追加なし。既存のGLOBALアニメーションファイルを重複保存しません。
+透明度はヒートマップだけに適用し、等値線・地図背景・ラベルはそのまま視認可能です。
 
 ## 注意
-- GNSS衛星データは最新TLEの1セットのみを処理・出力し、過去のTLEやDOP履歴ファイルを新規保存しません。
-- `gnss_latest.json` の生成はビルド中に行われ、Gitの追跡対象としてコミットする必要はありません。
-- 最新TLEは72時間を超える時刻では欠測になります。
-- HTTP 503が継続する場合は、GitHub ActionsのGNSS生成ステップとPagesの配信状況を確認してください。
-- このZIPは公開設定の修正で、すでに導入済みのGlobal VTEC/foF2 UIは変更しません。
-- GitHubへのコミットおよび公開後の動作確認はまだ実施していません。
+
+- SWIFT-TEC日本域の予報計算に失敗した場合、GitHub Pagesの他の表示は維持されますが、日本域には「日本域の独立予報が未公開」と表示されます。全球予報を日本域のISEEモデルと偽って表示することはありません。
+- 最初に [Actions] → [Build and publish SWIFT-ION] の `Export SWIFT-TEC ISEE Japan regional forecast` の結果を確認してください。
+- docs/japan_animation/index.json がデプロイ後に閲覧できれば、日本域の格子データ配信ができています。
+- GitHub Pagesの再公開（Deploy）の成功は別途必要です。
+- 日本域モデルのVTECは過去観測でなくSWIFT-TECの予報値ですが、その初期データにはISEEの過去観測に由来する平均が用いられます。未検証の研究予報です。
+- 誤差とGNSSのm単位値は受信機で実際に観測された測位誤差ではありません。
+
+## 重要なデータ容量の方針
+
+新しい日本域用の30分データは、Pages公開のその時点の予報用スナップショットだけです。
+追加の長期履歴・GNSS時系列保存はありません。
+
+## トラブルシューティング
+
+日本域でデータ未公開の場合：ActionsのJapan exportステップで、時刻別平均データ、Kp予報、格子AI補正の取得が成功しているか確認してください。Globalに戻れば既存のNOAA版表示を利用できます。

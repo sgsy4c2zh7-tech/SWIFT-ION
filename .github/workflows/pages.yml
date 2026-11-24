@@ -72,6 +72,22 @@ jobs:
           python scripts/build_live_swifttec.py
           python scripts/check_animation.py
 
+      - name: Export SWIFT-TEC ISEE Japan regional forecast (no global substitution)
+        continue-on-error: true
+        run: |
+          python scripts/build_live_japan_swifttec.py
+          python - <<'PYJAPAN'
+          import json
+          from pathlib import Path
+          p=Path('docs/japan_animation/index.json')
+          d=json.loads(p.read_text(encoding='utf-8'))
+          assert d['metadata']['source_region']=='japan'
+          assert d['metadata']['is_swifttec_isee_forecast'] is True
+          assert d['metadata']['is_isee_observation'] is False
+          assert len(d['time_utc'])>=48
+          print('Japan ISEE-linked forecast:',len(d['time_utc']),'frames')
+          PYJAPAN
+
       - name: Fetch NOAA SWPC current scales
         run: python scripts/build_space_weather.py
 

@@ -5,7 +5,7 @@ export function segmentsForLevel(grid, values, level) {
   const { latitudes, longitudes, nx, ny } = grid || {};
   if (!Array.isArray(values) || values.length !== nx * ny || nx < 2 || ny < 2) return [];
   const out = [];
-  for (let i = 0; i < ny - 1; i++) for (let j = 0; j < nx; j++) {
+  for (let i = 0; i < ny - 1; i++) for (let j = 0; j < (grid.regional ? nx - 1 : nx); j++) {
     const j2 = (j + 1) % nx;
     const a = i * nx, b = (i + 1) * nx;
     const v = [values[a+j], values[a+j2], values[b+j2], values[b+j]];
