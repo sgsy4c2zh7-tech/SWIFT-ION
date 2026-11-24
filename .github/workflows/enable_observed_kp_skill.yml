@@ -1,0 +1,38 @@
+name: Enable observed-Kp foF2 skill classification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout SWIFT-ION main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply observed Kp patch to foF2 verification and year UI
+        run: python scripts/apply_observed_kp_patch.py
+      - name: Validate syntax and test forecast/observed separation
+        run: |
+          python -m py_compile scripts/build_tec_skill.py scripts/observed_kp_support.py
+          python -m unittest discover -s tests -p 'test_observed_kp_support.py' -v
+      - name: Commit updated files
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/build_tec_skill.py docs/year.html
+          if git diff --cached --quiet; then
+            echo 'Observed-Kp classification already applied'
+            exit 0
+          fi
+          git commit -m 'Classify foF2 forecast skill by observed Kp and retain forecast Kp reference'
+          git push origin HEAD:main
