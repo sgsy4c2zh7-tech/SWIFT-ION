@@ -65,9 +65,9 @@ def build(upstream, output, vendor):
         'status':'AVAILABLE' if sats else 'UNAVAILABLE',
         'satellite_counts':source_summary,
         'is_latest_only':True,'historical_tle_retained':False,
-        'limits':{'max_tle_age_hours':72,'positioning_error_is_observed':False,
+        'limits':{'tle_age_rejection_enabled':False,'positioning_error_is_observed':False,
                   'model':'single-frequency L1 uncorrected first-order ionosphere; SGP4; equal-weight position/clock LS',
-                  'warning':'Research-only L1-equivalent display; constellation-specific carrier group delays, receiver corrections, and performance are not validated.'},
+                  'warning':'Research-only L1-equivalent display; TLE propagation is not age-limited but accuracy degrades away from epoch; constellation-specific carrier group delays, receiver corrections, and performance are not validated.'},
         'satellites':sats,
     }
     output.parent.mkdir(parents=True,exist_ok=True)

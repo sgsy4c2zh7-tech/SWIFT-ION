@@ -4,6 +4,8 @@
  * SGP4 -> receiver elevation/azimuth -> 350-km thin-shell pierce points ->
  * VTEC(x_ipp) -> slant pseudorange delays -> position/clock least squares.
  * The returned displacement is NOT observed GNSS accuracy or receiver error.
+ * No fixed-age TLE propagation cutoff: SGP4 runs for requested forecast times.
+ * Propagation uncertainty grows away from the TLE epoch; do not use operationally.
  */
 import {spatial} from './forecast.js';
 const RAD = Math.PI / 180;
@@ -11,7 +13,6 @@ export const L1_FREQUENCY_HZ = 1575.42e6;
 export const METERS_PER_TECU = 40.3e16 / (L1_FREQUENCY_HZ * L1_FREQUENCY_HZ);
 export const EARTH_KM = 6371;
 export const SHELL_KM = 350;
-export const MAX_TLE_AGE_HOURS = 72;
 export const ELEVATION_MASK_DEG = 10;
 export const GNSS_GROUPS = Object.freeze({
   gps: ['gps'],
@@ -46,7 +47,7 @@ export function prepareSatellites(snapshot, satLib) {
   return sats;
 }
 
-export function propagateSnapshot(sats, satLib, at, group = 'gps', maxAgeHours = MAX_TLE_AGE_HOURS) {
+export function propagateSnapshot(sats, satLib, at, group = 'gps') {
   // Accept a legacy named preset or an explicit list of individually selected systems.
   // An empty list means no selected satellites, not an implicit GPS fallback.
   const selected = Array.isArray(group) ? group : (GNSS_GROUPS[group] || GNSS_GROUPS.gps);
@@ -57,7 +58,7 @@ export function propagateSnapshot(sats, satLib, at, group = 'gps', maxAgeHours =
   if (!Number.isFinite(date.getTime())) return out;
   const gmst = satLib.gstime(date);
   for (const s of sats) {
-    if (!allowed.includes(s.system) || Math.abs(date.getTime() - s.epoch_ms) > maxAgeHours * 3600000) continue;
+    if (!allowed.includes(s.system)) continue;
     try {
       const state = satLib.propagate(s.satrec, date);
       if (!state?.position || !Number.isFinite(state.position.x)) continue;

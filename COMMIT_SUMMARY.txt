@@ -1,1 +1,1 @@
-Fix GNSS snapshot, add constellation selection and H/V error maps, improve map fullscreen
+Remove 72-hour GNSS TLE propagation cutoff

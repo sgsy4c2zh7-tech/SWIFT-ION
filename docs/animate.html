@@ -26,7 +26,7 @@ label{font-size:12px;color:#bfd8e7;display:flex;flex-direction:column;gap:3px}.c
 @media(max-width:700px){header,.panel{padding-left:11px;padding-right:11px}#map{height:55vh}h1{font-size:20px}.toolbar{gap:6px}#map:fullscreen #mapHud{bottom:5px;left:6px;right:6px;padding:7px}#map:fullscreen #timeHud{top:6px;right:6px;font-size:12px}#mapHud button,#mapHud select{font-size:12px}}
 </style></head><body>
 <header><h1>SWIFT-ION <span style="color:#79d4f7">Global Time Animation</span></h1><nav><a href="./index.html">Dashboard</a><a href="./impact.html">Flight Route Impact</a><a href="./globe.html">3D Globe</a><a href="./field.html">foF2 / IRI</a><a href="./year.html">365-day Skill</a></nav>
-<div class="warn">30分刻みのSWIFT-TEC VTECモデル予報（実測値ではありません）。GNSS指標は最新TLEに基づく単周波L1電離圏の簡易推定です。実測測位精度、利用可否、リアルタイム観測ではありません。</div></header>
+<div class="warn">30分刻みのSWIFT-TEC VTECモデル予報（実測値ではありません）。GNSS指標は最新TLEをSGP4で伝搬した単周波L1電離圏の簡易推定です。TLE伝搬の72時間制限はありませんが、長期伝搬の精度は保証されません。実測測位精度、利用可否、リアルタイム観測ではありません。</div></header>
 <section class="panel" id="panel"><div class="toolbar" id="toolbar">
 <button id="play" class="primary" disabled>▶ 再生</button><button id="prev" disabled>◀ 30分</button><button id="next" disabled>30分 ▶</button>
 <label>再生速度<select id="speed"><option value="1">1フレーム/秒</option><option value="2" selected>2フレーム/秒</option><option value="4">4フレーム/秒</option></select></label>
@@ -50,7 +50,7 @@ label{font-size:12px;color:#bfd8e7;display:flex;flex-direction:column;gap:3px}.c
 <div class="foot">操作：再生/停止、30分送り、時刻スライダー、地図ズーム。GNSS推定は単周波L1・350 km薄殻モデル・衛星配置・等重み最小二乗の参考値です。衛星健全性はGPSの公開YUMA情報以外、検証されていません。<span id="clicked"></span></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="./vendor/satellite.min.js"></script><script type="module">
 import {ForecastCube,renderRaster,spatial,interpolateColor} from './shared/forecast.js';
-import {prepareSatellites,propagateSnapshot,buildGnssGrid,MAX_TLE_AGE_HOURS} from './shared/gnss-iono.mjs';
+import {prepareSatellites,propagateSnapshot,buildGnssGrid} from './shared/gnss-iono.mjs';
 import {drawContours} from './shared/field-contour-canvas.mjs';
 const $=id=>document.getElementById(id),cube=new ForecastCube('./animation/');
 const map=L.map('map',{worldCopyJump:true,zoomControl:true}).setView([18,0],2);
@@ -112,7 +112,7 @@ function resolveGnss(frame){const time=cube.times[index],systems=selectedConstel
  if(!systems.length)return null;
  const key=index+'|'+systems.slice().sort().join(',');
  if(gnssCache.has(key))return gnssCache.get(key);
- const position=propagateSnapshot(satellites,window.satellite,time,systems,MAX_TLE_AGE_HOURS);
+ const position=propagateSnapshot(satellites,window.satellite,time,systems);
  if(!position.length)return null;
  const grid=buildGnssGrid(cube,frame,position,{latStep:6,lonStep:6,elevMask:10});
  if(!grid.validCount)return null;
@@ -138,7 +138,7 @@ async function render(){if(!cube.times)return;const seq=++renderSeq,mode=$('mode
   else if(gnssError)extra='GNSS最新TLEが利用できません: '+gnssError+'。PagesビルドのGNSSスナップショット生成を確認してください。';
   else {
    const grid=resolveGnss(data);
-   if(!grid)extra=`GNSS値なし：可視衛星不足・配置の退化・TLE鮮度超過（最大±${MAX_TLE_AGE_HOURS}時間）またはVTEC欠測。過去時刻や72時間より先の表示は欠測になります。`;
+   if(!grid)extra='GNSS値なし：可視衛星不足・配置の退化・SGP4計算失敗またはVTEC欠測（TLEの時間制限はありません）。';
    else {
     currentGrid=grid;
     currentValues=({pdop:grid.dop,hdop:grid.hdop,vdop:grid.vdop,
