@@ -310,7 +310,7 @@ def run(obs_file: Path, history: Path, docs: Path, *, now=None, iri_function=Non
     if issue_new:
         if iri_function is None:
             from iri2020 import IRI as iri_function
-        outlook=build_outlook(observations,iri_function,now,max_stations=12,published_at=published_at)
+        outlook=build_outlook(observations,iri_function,now,max_stations=32,published_at=published_at)
         if outlook['forecasts']:
             store_outlook(history,outlook)
     else:

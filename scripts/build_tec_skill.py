@@ -22,6 +22,7 @@ from statistics import mean
 from build_year_archive import (read_daily, write_daily, dates, valid_number,
                                 FOF2_TOL_MHZ, RETENTION_DAYS)
 from build_prospective_skill import iso, parse_utc, next_utc_hour, save
+from observed_kp_support import backfill_verified_matches
 TEC_HORIZONS_H = (1,3,6,12,24,36,48,60,72)
 HORIZONS_H = TEC_HORIZONS_H
 
@@ -29,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = 'swift-ion-tec-fof2-prospective-v1'
 REPORT_SCHEMA = 'swift-ion-tec-fof2-skill-365-v1'
 MAX_ISSUANCE_AGE_H = 3
-MAX_STATIONS = 16
+MAX_STATIONS = 32
 MAX_SPATIAL_JP_KM = 750
 MAX_SPATIAL_GLOBAL_KM = 2500
 
@@ -132,7 +133,8 @@ def build_snapshot(model, observations, now, max_stations=MAX_STATIONS):
                 {'station':'KOKUBUNJI','lat':35.71,'lon':139.49},
                 {'station':'YAMAGAWA','lat':31.20,'lon':130.62},
                 {'station':'OKINAWA','lat':26.68,'lon':128.15}]
-    station_list=nict_fixed+list(observations.get('stations', []))
+    from station_coverage import balanced_global_sample
+    station_list=nict_fixed+balanced_global_sample(list(observations.get('stations', [])), max_stations)
     visited_coordinates=[]
     for obs in station_list:
         if len(unique) >= max_stations: break
@@ -311,6 +313,11 @@ def paired_summary(rows):
     kp3day=[r for r in accepted if r.get('kp_3day_confirmed') is True]
     by_activity={group:[r for r in kp3day if kp_activity(r.get('kp_forecast'))==group]
                  for group in ('QUIET_KP_LT_4','ACTIVE_KP_4_TO_5','STORM_KP_GE_5','UNKNOWN')}
+    # NEW MAIN BREAKDOWN: categorize the issued predictions by ACTUAL geomagnetic activity.
+    # Observed Kp arrives only after the 3-hour bin closes; unknown stays unknown.
+    by_observed_activity={group:[r for r in kp3day if kp_activity(r.get('kp_observed'))==group]
+                          for group in ('QUIET_KP_LT_4','ACTIVE_KP_4_TO_5','STORM_KP_GE_5','UNKNOWN')}
+    observed_pairs=sum(len(by_observed_activity[g]) for g in ('QUIET_KP_LT_4','ACTIVE_KP_4_TO_5','STORM_KP_GE_5'))
     iri=metric(accepted,'predicted_fof2_iri_mhz')
     tec=metric(accepted,'predicted_fof2_tec_mhz')
     improvement=round(tec['hit_rate_percent']-iri['hit_rate_percent'],2) if accepted else None
@@ -326,6 +333,12 @@ def paired_summary(rows):
                  'iri':metric(cohort,'predicted_fof2_iri_mhz'),
                  'tec':metric(cohort,'predicted_fof2_tec_mhz')}
                  for group,cohort in by_activity.items()},
+             'kp3day_by_observed_activity':{group:{'paired_count':len(cohort),
+                 'iri':metric(cohort,'predicted_fof2_iri_mhz'),
+                 'tec':metric(cohort,'predicted_fof2_tec_mhz')}
+                 for group,cohort in by_observed_activity.items()},
+             'observed_kp_paired_count':observed_pairs,
+             'observed_kp_unknown_count':len(kp3day)-observed_pairs,
             'extended_paired_count':len(extended),
             'extended_iri':metric(extended,'predicted_fof2_iri_mhz'),
             'extended_tec':metric(extended,'predicted_fof2_tec_mhz')}
@@ -364,6 +377,9 @@ def report(history, now):
         'is_validated_assimilative_forecast':False,'is_hmf2_tec_skill':False,
         'is_3d_density_skill':False,
         'kp_3day_main_skill_requires_exact_same_run_source':True,
+         'kp_grouping_main':'NOAA_SWPC_ESTIMATED_OBSERVED_KP_AFTER_3H_BIN_END',
+         'kp_grouping_reference':'ISSUED_NOAA_3DAY_FORECAST_KP',
+         'kp_missing_policy':'UNKNOWN_NOT_ZERO_AND_NOT_ASSUMED_FORECAST',
         'lead_times_hours':list(HORIZONS_H),
         'warning':'Research-only uniform scaling scenario. MAIN paired accuracy uses STANDARD quality only; EXTENDED low-confidence estimates have separately labeled provisional metrics. Missing observations do not count as misses; no retrospective forecast backfill.'},
         'status':'AVAILABLE' if sum(x['paired_count'] for x in byh.values()) else 'AWAITING_PAIRED_PROSPECTIVE_MATCHES',
@@ -380,7 +396,8 @@ def export_csv(path, rows, date_key):
            'same_issue_kp3day_n','same_issue_kp3day_tec_hit_pct','same_issue_kp3day_tec_mae_mhz',
            'same_issue_kp3day_hit_pct_1mhz','same_issue_kp3day_hit_pct_2mhz','same_issue_kp3day_hit_pct_3mhz',
            'same_issue_kp3day_iri_mae_mhz','same_issue_kp3day_tec_rmse_mhz','same_issue_kp3day_tec_bias_mhz','same_issue_kp3day_tec_mape_pct',
-           'forecast_kp_quiet_n','forecast_kp_storm_n']
+           'forecast_kp_quiet_n','forecast_kp_storm_n',
+           'observed_kp_quiet_n','observed_kp_active_n','observed_kp_storm_n','observed_kp_unknown_n']
     with Path(path).open('w',newline='',encoding='utf-8-sig') as f:
         w=csv.DictWriter(f,fieldnames=names);w.writeheader()
         for item in rows:
@@ -403,7 +420,11 @@ def export_csv(path, rows, date_key):
             'same_issue_kp3day_tec_bias_mhz':s['kp3day_tec']['bias'],
             'same_issue_kp3day_tec_mape_pct':s['kp3day_tec']['mape_pct'],
             'forecast_kp_quiet_n':s['kp3day_by_activity']['QUIET_KP_LT_4']['paired_count'],
-            'forecast_kp_storm_n':s['kp3day_by_activity']['STORM_KP_GE_5']['paired_count']}
+            'forecast_kp_storm_n':s['kp3day_by_activity']['STORM_KP_GE_5']['paired_count'],
+            'observed_kp_quiet_n':s['kp3day_by_observed_activity']['QUIET_KP_LT_4']['paired_count'],
+            'observed_kp_active_n':s['kp3day_by_observed_activity']['ACTIVE_KP_4_TO_5']['paired_count'],
+            'observed_kp_storm_n':s['kp3day_by_observed_activity']['STORM_KP_GE_5']['paired_count'],
+            'observed_kp_unknown_n':s['kp3day_by_observed_activity']['UNKNOWN']['paired_count']}
             for key in ('mae','rmse','bias'):
                 base[f'iri_{key}_mhz_paired']=iri[key];base[f'tec_{key}_mhz_paired']=tec[key]
             w.writerow(base)
@@ -433,6 +454,8 @@ def run(observations_file, model_file, history, docs, *, now=None, issue_new=Non
     previous=recent_snapshots(history,now)
     matches=score_observations(observations,previous,now)
     count=store_matches(history,matches,now)
+    # Audit-only label: match observed Kp to already-issued foF2 forecasts.
+    kp_observed_audit=backfill_verified_matches(history,now)
     if issue_new is None:
         issue_new=not previous or now- max(parse_utc(s['metadata']['issued_at']) for s in previous)>=timedelta(hours=6)
     reason='NOT_SCHEDULED'
@@ -447,6 +470,7 @@ def run(observations_file, model_file, history, docs, *, now=None, issue_new=Non
     removed=prune(history,now)
     payload=report(history,now)
     payload['archive']={'new_snapshot_issued':snapshot is not None,
+        'observed_kp_audit':kp_observed_audit,
         'snapshot_status':reason, 'previous_snapshots_30h':len(previous),
         'new_matches':count,'expired_file_count':removed,
         'snapshot_days':len(list((history/'tec_outlooks').glob('*.jsonl.gz'))),
