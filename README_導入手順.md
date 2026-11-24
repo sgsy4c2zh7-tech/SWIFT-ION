@@ -1,64 +1,62 @@
-# SWIFT-ION：foF2「観測Kp別」的中率・実装パッチ
+# SWIFT-ION 日本域（SWIFT-TEC / ISEE）404修正版
 
-このパッケージは **SWIFT-ION** の foF2 365-day Skill に対する追加機能です。
+## 対象症状
 
-## 何が変わる？
+Global Time Animation で「日本周辺（SWIFT-TEC / ISEE連動予報）」を選択すると、
+「日本域の独立したSWIFT-TEC / ISEE予報が未公開です: 30分格子index HTTP 404」と出る。
 
-- **主分類：観測Kp**。NOAA SWPCの推定観測Kpを、予報対象時刻を含む3時間区間に正確に対応づけます。3時間区間の終了前には評価へ追加しません。
-- **参考分類：予報Kp**。現在の予報Kp別の表は折りたたみ式で残します。
-- **foF2を計算する際のKpは変更しません。** 発表時点で利用できた3日間の予報Kpで予測した値を後から改変しないため、予測の実力を公平に評価できます。
-- **分類：** Kp<4 平穏、4≤Kp<5 活動的、Kp≥5 磁気嵐相当、観測Kp未取得は「不明」。不明を0や予報Kpに置き換えません。
-- **NOAA推定Kp≠GFZ確定Kp**。日本語ラベルにも注意書きを追加します。
-- 365日保存の `tec_matches` の各レコードに観測Kp値と出典を追記するだけ。SWIFT-TECにある観測Kpアーカイブを使い、巨大な新規TEC格子ファイルは作りません。
-- メイン指標の比較対象は従来どおり「同一SWIFT-TEC実行で予報Kpの出典が確認できた事前発表済み予報」「STANDARD品質」「観測foF2照合済み」に限定します。分類を変えても元の一致ペアの母数を増やしません。
+2026-11-24 05:47 UTC台のGitHub Actionsログでは、日本域出力ステップが
+`SWIFT-TEC ISEE selector missing` で失敗していました。従来のスクリプトは
+SWIFT-TECのJS関数の登録を待つ一方、約550ms遅れて生成される
+`#swiftV52TecSource` の表示用セレクタは待っていませんでした。
+`continue-on-error: true` により、その失敗がPages全体の成功表示に埋もれていました。
 
-## GitHub上で適用（ブラウザのみ）
+## ZIP内の配置先
 
-1. ZIPを解凍し、以下の3ファイルを **SWIFT-ION mainブランチ** に同じパスで追加：
-   - `scripts/observed_kp_support.py`
-   - `scripts/apply_observed_kp_patch.py`
-   - `.github/workflows/enable_observed_kp_skill.yml`
-   - （任意・推奨）`tests/test_observed_kp_support.py`
-2. GitHub → **Actions** → **Enable observed-Kp foF2 skill classification** → **Run workflow** を1回実行。
-3. 成功すると、ワークフローが以下2ファイルの変更をmainへコミットします：
-   - `scripts/build_tec_skill.py`
-   - `docs/year.html`
-4. GitHub → Actions → **Build and publish SWIFT-ION** → **Run workflow** を実行。Actions内で観測Kpを過去の予報照合履歴と対応づけ、GitHub Pagesに表示します。
-5. `year.html` の「磁気活動別のfoF2予報精度（観測Kpで分類）」を確認。下に予報Kpの参考表が表示されます。
+- `scripts/build_live_japan_swifttec.py`（上書き）
+- `scripts/japan_kp_issue.py`（新規追加）
+- `.github/workflows/pages.yml`（上書き）
+- `tests/test_japan_kp_issue.py`（新規追加）
 
-> GitHub Actionsにリポジトリの書き込み権限がない場合は、手順3が失敗します。その場合はgit cloneしたリポジトリで `python scripts/apply_observed_kp_patch.py` を実行し、変更された2ファイルをmainへコミットします。
+既存の `docs/animate.html`、`docs/field.html`、GNSS、foF2、全球VTEC予報は変更しません。
+`docs/japan_animation` の30分予報はActionsの実行時に自動作成されます。
 
-> **注意:** GITHUB_TOKENで作成したコミットは通常のpushトリガーを発火しないため、手順4は手動で行ってください。
+## 変更の内容
 
-## ローカル適用（Gitあり）
+1. セレクタが表示されるまで待機（`wait_for_selector`）。
+2. SWIFT-TEC本来の `swiftIseeRunMeanForecast()` を直接実行。
+   UIボタン側がエラーを握りつぶす場合にも原因を出力。
+3. 同じActions実行で検証済みの24区間NOAA予報Kpを
+   `docs/swifttec_kp_issued.json` から読み込み、元のSWIFT-TECのKp系列として提供。
+   欠落や不正なKpの代替に観測KpやKp=3を使用しない。
+4. 3日間のKp予報期間を超える場合は最後のKpを暫定保持し、メタデータにその旨を表示。
+5. `pages.yml` の日本域生成で `continue-on-error` を廃止。
+   日本域データ未生成ならビルド失敗として見えるように変更。
+6. 最新予報の生成・公開のみを維持。日本域予報の長期蓄積は追加しない。
 
-ZIP内のファイルをリポジトリの同じパスへ配置したあと：
+## 導入方法
 
-```bash
-python scripts/apply_observed_kp_patch.py
-python -m unittest discover -s tests -p 'test_observed_kp_support.py' -v
-git add scripts/observed_kp_support.py scripts/apply_observed_kp_patch.py scripts/build_tec_skill.py docs/year.html tests/test_observed_kp_support.py
-git commit -m "Classify foF2 skill by observed Kp; keep forecast Kp as reference"
-git push
-```
+1. ZIPを解凍します。
+2. 上記4ファイルをSWIFT-IONリポジトリの同じパスにアップロード・上書きします。
+3. Commit directly to main branchでコミットします。
+4. GitHub Actionsの `Build and publish SWIFT-ION` を確認します。
+5. `Export SWIFT-TEC ISEE Japan regional forecast` が成功しているか確認します。
+6. GitHub PagesのDeploy成功後、以下のURLを開いて `index.json` が表示されることを確認します。
+   https://sgsy4c2zh7-tech.github.io/SWIFT-ION/japan_animation/index.json
+7. Global Time Animationで日本域を選択してリロードしてください。
 
-## 仕組み・監査
+Commit summary:
+`Fix Japan ISEE forecast generation and missing index`
 
-- 観測Kp：`_upstream_swifttec/docs/data/ai/isee_japan/kp_actual_archive.json` （SWIFT-TECが保存したNOAA SWPCの推定観測Kp）
-- 予報Kp：従来の `docs/swifttec_kp_issued.json` とfoF2発表済み履歴（変更しない）
-- 観測値の結合キー： `floor(valid_at UTC / 3時間)` で求めた3時間区間開始時刻。近傍Kpへの丸めや未来Kpでの補完は行わない。
-- 観測Kpが欠測： `UNKNOWN` として表示。すでに保存されている過去の実測Kpは一時的な取得失敗で消さない。
-- API／表示の項目： `kp3day_by_observed_activity`（新規・主分類）、`kp3day_by_activity`（従来の予報Kp別・参考分類）。
-- 日別・月別CSVに `observed_kp_quiet_n`, `observed_kp_active_n`, `observed_kp_storm_n`, `observed_kp_unknown_n` が追加。
-- 発表済みfoF2、AI係数の学習、TLE、DOP、TECデータの計算は一切変更しません。
+## 注意
 
-### 大事な区別
-
-- **的中率** = 「発表済みfoF2予報 vs 後日のfoF2観測」を比較。Kpはその比較を磁気活動で分類するためだけに使用。
-- **予報Kpによる参考分類** = 実際の磁気嵐ではなく予報で想定した磁気活動別の成績。
-- **Kp予報の誤差そのもの** は今回の表に含みません。必要なら別途、同じ対象時刻の予報Kpと観測Kpの差を算出します。
-- データ不足なら「評価待ち」。変更だけで評価0件が必ず解消するわけではありません。
-
-## Commit Summary
-
-`Classify foF2 skill by observed Kp; keep forecast Kp as reference`
+- 変更前は日本域の生成失敗時でも全球を公開していました。
+  今回は日本域生成失敗を明確なActionsエラーにするため、
+  **日本域データの生成に失敗すると、その回のPages公開は実施されません。**
+  この場合はActionsログを確認してください。既に公開済みのサイトはそのままです。
+- 日本域の予報ソースはSWIFT-TECオリジナルのISEE時刻別平均TEC + 予報Kp + 日本域格子AI補正です。
+  ISEE観測データそのものや全球VTECの日本域切り出しで代用しません。
+- このZIPには公開時の予報データ本体は含めません（生成処理の修正だけです）。
+- Kpの3日を超える延長は、実際のNOAA 4日予報ではありません。
+- ローカルでPython構文・YAML構文とKp入力検証7件は成功しました。
+  実際のupstreamブラウザ＋Actionsを通す公開前統合テストは未実施です。

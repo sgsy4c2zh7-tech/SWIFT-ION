@@ -72,8 +72,9 @@ jobs:
           python scripts/build_live_swifttec.py
           python scripts/check_animation.py
 
+      # Japan regional forecast is a requested production output. Do not mask
+      # failures as green deployments that omit japan_animation/index.json.
       - name: Export SWIFT-TEC ISEE Japan regional forecast (no global substitution)
-        continue-on-error: true
         run: |
           python scripts/build_live_japan_swifttec.py
           python - <<'PYJAPAN'
@@ -84,6 +85,7 @@ jobs:
           assert d['metadata']['source_region']=='japan'
           assert d['metadata']['is_swifttec_isee_forecast'] is True
           assert d['metadata']['is_isee_observation'] is False
+          assert d['metadata']['kp_source_mode']=='SWIFTTEC_SAME_ISSUE_NOAA_3DAY'
           assert len(d['time_utc'])>=48
           print('Japan ISEE-linked forecast:',len(d['time_utc']),'frames')
           PYJAPAN
